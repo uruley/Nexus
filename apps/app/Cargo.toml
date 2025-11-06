@@ -6,3 +6,5 @@ edition = "2021"
 [dependencies]
 bevy.workspace = true
 tracing-subscriber.workspace = true
+anchor.workspace = true
+http_api.workspace = true
