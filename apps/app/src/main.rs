@@ -1,4 +1,4 @@
-use anchor::AnchorPlugin;
+use anchor::{AnchorPlugin, SimulationMode};
 use app_core::HudPlugin;
 use bevy::{
     asset::AssetPlugin,
@@ -7,37 +7,61 @@ use bevy::{
     window::WindowPlugin,
     winit::WinitPlugin,
 };
+use clap::Parser;
 use http_api::HttpApiPlugin;
+use std::path::PathBuf;
 use tracing::Level;
 use tracing_subscriber::fmt::time::UtcTime;
 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[arg(long, value_name = "FILE", conflicts_with = "replay")]
+    record: Option<PathBuf>,
+
+    #[arg(long, value_name = "FILE", conflicts_with = "record")]
+    replay: Option<PathBuf>,
+}
+
 fn main() {
+    let cli = Cli::parse();
+
+    let mode = match (cli.record, cli.replay) {
+        (Some(path), None) => SimulationMode::Record { path },
+        (None, Some(path)) => SimulationMode::Replay { path },
+        (None, None) => SimulationMode::Normal,
+        _ => unreachable!("clap conflicts ensure only one of record/replay is set"),
+    };
+
     tracing_subscriber::fmt()
         .with_target(false)
         .with_max_level(Level::INFO)
         .with_timer(UtcTime::rfc_3339())
         .init();
 
-    App::new()
-        .add_plugins((
-            MinimalPlugins,
-            TransformPlugin,
-            HierarchyPlugin,
-            DiagnosticsPlugin,
-            InputPlugin,
-            AssetPlugin::default(),
-            WindowPlugin::default(),
-            WinitPlugin::default(),
-            bevy::render::RenderPlugin::default(),
-            bevy::core_pipeline::CorePipelinePlugin::default(),
-            bevy::sprite::SpritePlugin::default(),
-            bevy::pbr::PbrPlugin::default(),
-            AnchorPlugin::default(),
-            HttpApiPlugin,
-            HudPlugin,
-        ))
-        .add_systems(Startup, setup)
-        .run();
+    let mut app = App::new();
+
+    app.insert_resource(mode);
+
+    app.add_plugins((
+        MinimalPlugins,
+        TransformPlugin,
+        HierarchyPlugin,
+        DiagnosticsPlugin,
+        InputPlugin,
+        AssetPlugin::default(),
+        WindowPlugin::default(),
+        WinitPlugin::default(),
+        bevy::render::RenderPlugin::default(),
+        bevy::core_pipeline::CorePipelinePlugin::default(),
+        bevy::sprite::SpritePlugin::default(),
+        bevy::pbr::PbrPlugin::default(),
+        AnchorPlugin::default(),
+        HttpApiPlugin,
+        HudPlugin,
+    ))
+    .add_systems(Startup, setup)
+    .run();
 }
 
 fn setup(mut commands: Commands) {
