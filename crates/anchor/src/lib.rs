@@ -1,7 +1,12 @@
 use bevy::prelude::*;
+use bevy::time::Fixed;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::{info, warn};
+
+mod metrics;
+
+pub use metrics::FrameTimings;
 
 pub const INTENT_SPAWN: &str = "Spawn";
 pub const INTENT_MOVE: &str = "Move";
@@ -67,16 +72,21 @@ pub struct AnchorPlugin;
 
 impl Plugin for AnchorPlugin {
     fn build(&self, app: &mut App) {
+        metrics::init_metrics(app);
+
         app.register_type::<Velocity>()
             .register_type::<BodySize>()
             .add_event::<Intent>()
             .configure_sets(
-                Update,
+                FixedUpdate,
                 AnchorSystemSet::ApplyIntents.before(AnchorSystemSet::Integrate),
             )
-            .add_systems(Update, apply_intents.in_set(AnchorSystemSet::ApplyIntents))
             .add_systems(
-                Update,
+                FixedUpdate,
+                apply_intents.in_set(AnchorSystemSet::ApplyIntents),
+            )
+            .add_systems(
+                FixedUpdate,
                 integrate_velocity.in_set(AnchorSystemSet::Integrate),
             );
     }
@@ -182,7 +192,7 @@ fn despawn_entity(commands: &mut Commands, entity_bits: u64) {
     }
 }
 
-fn integrate_velocity(time: Res<Time>, mut query: Query<(&mut Transform, &Velocity)>) {
+fn integrate_velocity(time: Res<Time<Fixed>>, mut query: Query<(&mut Transform, &Velocity)>) {
     let delta = time.delta_seconds();
     if delta == 0.0 {
         return;
