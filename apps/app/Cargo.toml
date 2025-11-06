@@ -9,3 +9,4 @@ tracing-subscriber.workspace = true
 anchor.workspace = true
 http_api.workspace = true
 app_core.workspace = true
+clap = { version = "4", features = ["derive"] }
