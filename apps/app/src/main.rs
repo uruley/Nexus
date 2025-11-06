@@ -1,4 +1,5 @@
 use anchor::AnchorPlugin;
+use app_core::HudPlugin;
 use bevy::{
     asset::AssetPlugin,
     core_pipeline::{clear_color::ClearColorConfig, core_3d::Camera3dBundle},
@@ -7,9 +8,15 @@ use bevy::{
     winit::WinitPlugin,
 };
 use http_api::HttpApiPlugin;
+use tracing::Level;
+use tracing_subscriber::fmt::time::UtcTime;
 
 fn main() {
-    tracing_subscriber::fmt().with_target(false).init();
+    tracing_subscriber::fmt()
+        .with_target(false)
+        .with_max_level(Level::INFO)
+        .with_timer(UtcTime::rfc_3339())
+        .init();
 
     App::new()
         .add_plugins((
@@ -27,6 +34,7 @@ fn main() {
             bevy::pbr::PbrPlugin::default(),
             AnchorPlugin::default(),
             HttpApiPlugin,
+            HudPlugin,
         ))
         .add_systems(Startup, setup)
         .run();
