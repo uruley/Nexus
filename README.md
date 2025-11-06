@@ -1,29 +1,30 @@
-# Nexus Rust Workspace
+# Nexus Workspace
 
-This repository hosts the `nexus` Cargo workspace that aggregates core crates and the desktop Bevy application used by the project.
+This repository contains the **nexus** Cargo workspace. It hosts shared libraries alongside a Bevy desktop application that can be launched locally.
 
-## Workspace Layout
+## Workspace layout
 
-- `crates/anchor_core` – shared runtime primitives.
-- `crates/intent_api` – HTTP interface and request/response types.
-- `crates/world_introspection` – world state diagnostics utilities.
-- `crates/perf_hud` – performance heads-up display components.
-- `crates/unified_field` – shared data models.
-- `apps/nexus_desktop` – Bevy-based desktop frontend.
+- `crates/anchor` – placeholder logic for configuring and initializing anchor services.
+- `crates/http_api` – simple Axum router exposing a health endpoint.
+- `crates/world_state` – world entity tracking primitives built with `glam` vectors.
+- `apps/app` – Bevy application that opens an empty window with 2D and 3D cameras.
+
+## Prerequisites
+
+- Rust toolchain (Rust 1.75+ is recommended). Install via [`rustup`](https://rustup.rs/).
 
 ## Building
 
-```powershell
-cd C:\Users\ruley\Nexus
-cargo build --workspace
+```sh
+cargo build
 ```
 
-## Running the Desktop App
+This command compiles all workspace members, including the Bevy application and libraries.
 
-```powershell
-cd C:\Users\ruley\Nexus
-cargo run -p nexus_desktop
+## Running the app
+
+```sh
+cargo run -p app
 ```
 
-The desktop application launches a Bevy window powered by `MinimalPlugins` and `WinitPlugin`, initializing a simple scene with a 2D camera and a cube-like sprite.
-
+Running the binary opens an empty Bevy window with a custom clear color and both 2D and 3D cameras. Close the window to stop the program.

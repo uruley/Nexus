@@ -1,0 +1,9 @@
+[package]
+name = "world_state"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+glam.workspace = true
+serde.workspace = true
+tracing.workspace = true
