@@ -4,12 +4,18 @@ use bevy::{
     asset::AssetPlugin,
     core_pipeline::{clear_color::ClearColorConfig, core_3d::Camera3dBundle},
     prelude::*,
-    window::WindowPlugin,
+    window::{
+        MonitorSelection, PresentMode, Window, WindowPlugin, WindowPosition, WindowResolution,
+    },
     winit::WinitPlugin,
 };
 use clap::Parser;
 use http_api::HttpApiPlugin;
-use std::path::PathBuf;
+use std::{
+    net::SocketAddr,
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 use tracing::Level;
 use tracing_subscriber::fmt::time::UtcTime;
 
@@ -21,6 +27,18 @@ struct Cli {
 
     #[arg(long, value_name = "FILE", conflicts_with = "record")]
     replay: Option<PathBuf>,
+
+    #[arg(long, value_name = "SECONDS")]
+    duration: Option<f64>,
+
+    #[arg(long, value_name = "ADDR:PORT", default_value = "127.0.0.1:8787")]
+    bind: SocketAddr,
+}
+
+#[derive(Resource)]
+struct TimedExit {
+    start: Instant,
+    duration: Duration,
 }
 
 fn main() {
@@ -43,6 +61,15 @@ fn main() {
 
     app.insert_resource(mode);
 
+    if let Some(duration) = cli.duration {
+        app.insert_resource(TimedExit {
+            start: Instant::now(),
+            duration: Duration::from_secs_f64(duration.max(0.0)),
+        });
+    }
+
+    app.insert_resource(ClearColor(Color::srgb(0.04, 0.05, 0.07)));
+
     app.add_plugins((
         MinimalPlugins,
         TransformPlugin,
@@ -50,17 +77,27 @@ fn main() {
         DiagnosticsPlugin,
         InputPlugin,
         AssetPlugin::default(),
-        WindowPlugin::default(),
+        WindowPlugin {
+            primary_window: Some(Window {
+                title: "Nexus".into(),
+                resolution: WindowResolution::new(1280.0, 720.0),
+                present_mode: PresentMode::AutoVsync,
+                position: WindowPosition::Centered(MonitorSelection::Primary),
+                ..default()
+            }),
+            ..default()
+        },
         WinitPlugin::default(),
         bevy::render::RenderPlugin::default(),
         bevy::core_pipeline::CorePipelinePlugin::default(),
         bevy::sprite::SpritePlugin::default(),
         bevy::pbr::PbrPlugin::default(),
         AnchorPlugin::default(),
-        HttpApiPlugin,
+        HttpApiPlugin::new(cli.bind),
         HudPlugin,
     ))
     .add_systems(Startup, setup)
+    .add_systems(Update, (exit_on_esc, exit_on_duration))
     .run();
 }
 
@@ -97,4 +134,18 @@ fn setup(mut commands: Commands) {
         transform: Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.5, 0.5, 0.0)),
         ..default()
     });
+}
+
+fn exit_on_esc(keys: Res<ButtonInput<KeyCode>>, mut exit: EventWriter<AppExit>) {
+    if keys.just_pressed(KeyCode::Escape) {
+        exit.send(AppExit::Success);
+    }
+}
+
+fn exit_on_duration(timer: Option<Res<TimedExit>>, mut exit: EventWriter<AppExit>) {
+    if let Some(timer) = timer {
+        if timer.start.elapsed() >= timer.duration {
+            exit.send(AppExit::Success);
+        }
+    }
 }
