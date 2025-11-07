@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+opencv-python
+numpy
+torch
+torchvision
+Pillow
+onnxruntime
