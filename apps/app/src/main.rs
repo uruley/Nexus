@@ -3,7 +3,9 @@ use app_core::HudPlugin;
 use bevy::{
     asset::AssetPlugin,
     core_pipeline::{clear_color::ClearColorConfig, core_3d::Camera3dBundle},
+    math::primitives::Plane3d,
     prelude::*,
+    render::camera::{PerspectiveProjection, Projection},
     window::{
         MonitorSelection, PresentMode, Window, WindowPlugin, WindowPosition, WindowResolution,
     },
@@ -101,18 +103,26 @@ fn main() {
     .run();
 }
 
-fn setup(mut commands: Commands) {
+fn setup(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
         brightness: 400.0,
     });
 
     commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 0.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+        transform: Transform::from_xyz(0.0, 1.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
         camera: Camera {
             clear_color: ClearColorConfig::Custom(Color::srgb(0.05, 0.05, 0.08)),
             ..default()
         },
+        projection: Projection::Perspective(PerspectiveProjection {
+            fov: 60.0_f32.to_radians(),
+            ..default()
+        }),
         ..default()
     });
 
@@ -125,13 +135,24 @@ fn setup(mut commands: Commands) {
         ..default()
     });
 
-    commands.spawn(DirectionalLightBundle {
-        directional_light: DirectionalLight {
+    commands.spawn(PointLightBundle {
+        point_light: PointLight {
+            intensity: 1.2,
             shadows_enabled: true,
-            illuminance: 10_000.0,
             ..default()
         },
-        transform: Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.5, 0.5, 0.0)),
+        transform: Transform::from_xyz(2.0, 3.0, 1.0),
+        ..default()
+    });
+
+    commands.spawn(PbrBundle {
+        mesh: meshes.add(Mesh::from(Plane3d::default())),
+        material: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.25, 0.25, 0.28),
+            perceptual_roughness: 0.9,
+            ..default()
+        }),
+        transform: Transform::from_xyz(0.0, 0.0, 0.0),
         ..default()
     });
 }
