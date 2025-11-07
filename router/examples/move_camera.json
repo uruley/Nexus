@@ -1,0 +1,9 @@
+{
+  "id": "camera:update:orbit",
+  "type": "move_camera",
+  "data": {
+    "position": [2.0, 3.0, 6.0],
+    "target": [0.0, 1.0, 0.0],
+    "up": [0.0, 1.0, 0.0]
+  }
+}

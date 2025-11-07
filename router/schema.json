@@ -1,0 +1,114 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/schemas/world-patch.json",
+  "title": "World Patch",
+  "description": "Schema describing runtime world patch operations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "data"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the patch operation."
+    },
+    "type": {
+      "type": "string",
+      "enum": ["spawn_entity", "move_camera", "set_light"],
+      "description": "Patch operation discriminant."
+    },
+    "data": {
+      "type": "object",
+      "description": "Operation-specific payload.",
+      "oneOf": [
+        {
+          "title": "Spawn Entity",
+          "required": ["id", "mesh", "position"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Identifier assigned to the spawned entity."
+            },
+            "mesh": {
+              "type": "string",
+              "description": "Mesh or prefab used for the new entity."
+            },
+            "position": {
+              "$ref": "#/definitions/vector3"
+            },
+            "rotation": {
+              "$ref": "#/definitions/vector3"
+            },
+            "scale": {
+              "$ref": "#/definitions/vector3"
+            },
+            "metadata": {
+              "type": "object",
+              "description": "Arbitrary entity metadata.",
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "title": "Move Camera",
+          "required": ["position"],
+          "properties": {
+            "position": {
+              "$ref": "#/definitions/vector3"
+            },
+            "target": {
+              "$ref": "#/definitions/vector3"
+            },
+            "up": {
+              "$ref": "#/definitions/vector3"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "title": "Set Light",
+          "required": ["name"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Name of the light to adjust or create."
+            },
+            "color": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 3,
+              "description": "RGB color definition."
+            },
+            "intensity": {
+              "type": "number",
+              "description": "Scalar multiplier for light intensity."
+            },
+            "range": {
+              "type": "number",
+              "description": "Effective light range in scene units."
+            },
+            "type": {
+              "type": "string",
+              "description": "Lighting type descriptor (directional, point, etc.)."
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "vector3": {
+      "type": "array",
+      "description": "Three-dimensional vector.",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    }
+  }
+}
