@@ -1,0 +1,1 @@
+[2025-11-07][Senior Builder] Added runtime patch applier, router schema/examples, perception demo • How to run: `python runtime/main.py` to apply patches, `python perception/demo_depth_pose.py` for demo, `pytest tests/test_runtime_main.py` for verification

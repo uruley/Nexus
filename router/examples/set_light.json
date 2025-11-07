@@ -1,0 +1,11 @@
+{
+  "id": "light:key",
+  "type": "set_light",
+  "data": {
+    "name": "key",
+    "type": "directional",
+    "color": [1.0, 0.95, 0.85],
+    "intensity": 1.4,
+    "range": 25.0
+  }
+}
