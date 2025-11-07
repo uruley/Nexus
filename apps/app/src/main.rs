@@ -1,5 +1,6 @@
 use anchor::{AnchorPlugin, SimulationMode};
 use app_core::HudPlugin;
+use bevy::prelude::shape;
 use bevy::{
     asset::AssetPlugin,
     core_pipeline::{clear_color::ClearColorConfig, core_3d::Camera3dBundle},
@@ -101,7 +102,11 @@ fn main() {
     .run();
 }
 
-fn setup(mut commands: Commands) {
+fn setup(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
         brightness: 400.0,
@@ -134,6 +139,19 @@ fn setup(mut commands: Commands) {
         transform: Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.5, 0.5, 0.0)),
         ..default()
     });
+
+    commands
+        .spawn(PbrBundle {
+            mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
+            material: materials.add(StandardMaterial {
+                base_color: Color::srgb(0.7, 0.85, 1.0),
+                perceptual_roughness: 0.5,
+                ..default()
+            }),
+            transform: Transform::from_translation(Vec3::ZERO),
+            ..default()
+        })
+        .insert(Name::new("cube_1"));
 }
 
 fn exit_on_esc(keys: Res<ButtonInput<KeyCode>>, mut exit: EventWriter<AppExit>) {
