@@ -11,7 +11,7 @@ use anchor::{
 use axum::{
     extract::{Query, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -21,15 +21,32 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::net::TcpListener;
 use tracing::{error, info, warn};
+use world_state::{self, Checksum, Diff as WorldDiff, EntitySnapshot, Snapshot as WorldSnapshot};
 
-pub struct HttpApiPlugin;
+pub struct HttpApiPlugin {
+    bind_addr: SocketAddr,
+}
+
+impl HttpApiPlugin {
+    pub fn new(bind_addr: SocketAddr) -> Self {
+        Self { bind_addr }
+    }
+}
+
+impl Default for HttpApiPlugin {
+    fn default() -> Self {
+        Self {
+            bind_addr: "127.0.0.1:8787".parse().expect("default bind addr"),
+        }
+    }
+}
 
 impl Plugin for HttpApiPlugin {
     fn build(&self, app: &mut App) {
         let shared_state = SharedWorldState::default();
         let (sender, receiver) = unbounded();
 
-        start_server(shared_state.clone(), sender.clone());
+        start_server(shared_state.clone(), sender.clone(), self.bind_addr);
 
         app.insert_resource(IntentReceiver { receiver })
             .insert_resource(shared_state)
@@ -70,52 +87,61 @@ struct ServerState {
 
 const HISTORY_LIMIT: usize = 1024;
 
-#[derive(Default)]
 struct WorldStateStore {
     tick: u64,
+    checksum: Checksum,
     entities: HashMap<u64, EntitySnapshot>,
     history: VecDeque<DiffEntry>,
 }
 
-#[derive(Clone, Serialize, PartialEq)]
-struct EntitySnapshot {
-    id: u64,
-    pos: [f32; 3],
-    vel: [f32; 3],
-    size: [f32; 3],
+impl Default for WorldStateStore {
+    fn default() -> Self {
+        Self {
+            tick: 0,
+            checksum: world_state::checksum_for_state(0, &[]),
+            entities: HashMap::new(),
+            history: VecDeque::new(),
+        }
+    }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, PartialEq)]
 struct DiffEntry {
     tick: u64,
+    base: Checksum,
+    checksum: Checksum,
     added: Vec<EntitySnapshot>,
     removed: Vec<u64>,
     changed: Vec<EntitySnapshot>,
-}
-
-#[derive(Serialize)]
-struct EntitiesResponse {
-    tick: u64,
-    entities: Vec<EntitySnapshot>,
-}
-
-#[derive(Serialize)]
-struct DiffResponse {
-    tick: u64,
-    added: Vec<EntitySnapshot>,
-    removed: Vec<u64>,
-    changed: Vec<EntitySnapshot>,
-}
-
-#[derive(Deserialize)]
-struct DiffQuery {
-    since: Option<u64>,
 }
 
 #[derive(Deserialize)]
 struct IntentPayload {
     verb: String,
     args: Value,
+}
+
+#[derive(Deserialize)]
+struct WorldDiffQuery {
+    since: Option<String>,
+}
+
+enum DiffError {
+    MissingSince,
+    ParseError,
+    UnknownChecksum,
+    ChecksumTooOld,
+}
+
+impl DiffError {
+    fn message(&self) -> &'static str {
+        match self {
+            DiffError::MissingSince => "missing since query parameter",
+            DiffError::ParseError => "invalid checksum format",
+            DiffError::UnknownChecksum => "unknown checksum",
+            DiffError::ChecksumTooOld => "requested checksum is too old",
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -128,7 +154,7 @@ struct AcceptedResponse {
     status: &'static str,
 }
 
-fn start_server(world: SharedWorldState, sender: Sender<Intent>) {
+fn start_server(world: SharedWorldState, sender: Sender<Intent>, bind_addr: SocketAddr) {
     let server_state = ServerState {
         intents: sender,
         world: world.inner.clone(),
@@ -136,7 +162,7 @@ fn start_server(world: SharedWorldState, sender: Sender<Intent>) {
 
     let runtime = tokio::runtime::Runtime::new().expect("create tokio runtime");
     runtime.spawn(async move {
-        if let Err(err) = run_server(server_state).await {
+        if let Err(err) = run_server(server_state, bind_addr).await {
             error!("http server error: {err}");
         }
     });
@@ -144,16 +170,15 @@ fn start_server(world: SharedWorldState, sender: Sender<Intent>) {
     std::mem::forget(runtime);
 }
 
-async fn run_server(state: ServerState) -> Result<(), anyhow::Error> {
+async fn run_server(state: ServerState, bind_addr: SocketAddr) -> Result<(), anyhow::Error> {
     let router = Router::new()
-        .route("/entities", get(get_entities))
-        .route("/diff", get(get_diff))
+        .route("/world/snapshot", get(get_world_snapshot))
+        .route("/world/diff", get(get_world_diff))
         .route("/intent", post(post_intent))
         .with_state(state);
 
-    let addr: SocketAddr = "127.0.0.1:8787".parse()?;
-    let listener = TcpListener::bind(addr).await?;
-    info!("HTTP API listening on {addr}");
+    let listener = TcpListener::bind(bind_addr).await?;
+    info!("HTTP API listening on {bind_addr}");
     axum::serve(listener, router).await?;
     Ok(())
 }
@@ -195,6 +220,7 @@ fn sync_world_state(
 impl WorldStateStore {
     fn update(&mut self, new_entities: HashMap<u64, EntitySnapshot>) {
         let next_tick = self.tick + 1;
+        let base_checksum = self.checksum;
 
         let mut added = Vec::new();
         let mut changed = Vec::new();
@@ -218,10 +244,17 @@ impl WorldStateStore {
         changed.sort_by_key(|e| e.id);
         removed.sort_unstable();
 
+        let mut sorted_entities: Vec<_> = new_entities.values().cloned().collect();
+        sorted_entities.sort_by_key(|e| e.id);
+        let checksum = world_state::checksum_for_state(next_tick, &sorted_entities);
+
         self.tick = next_tick;
+        self.checksum = checksum;
         self.entities = new_entities;
         self.history.push_back(DiffEntry {
             tick: next_tick,
+            base: base_checksum,
+            checksum,
             added,
             removed,
             changed,
@@ -232,40 +265,54 @@ impl WorldStateStore {
         }
     }
 
-    fn snapshot(&self) -> EntitiesResponse {
+    fn snapshot(&self) -> WorldSnapshot {
         let mut entities: Vec<_> = self.entities.values().cloned().collect();
         entities.sort_by_key(|e| e.id);
-        EntitiesResponse {
+        WorldSnapshot {
             tick: self.tick,
+            checksum: self.checksum,
             entities,
         }
     }
 
-    fn diff_since(&self, since: u64) -> Result<DiffResponse, &'static str> {
-        if since > self.tick {
-            return Err("requested tick is in the future");
-        }
-
-        if since == self.tick {
-            return Ok(DiffResponse {
+    fn diff_since(&self, since: Checksum) -> Result<WorldDiff, DiffError> {
+        if since == self.checksum {
+            return Ok(WorldDiff {
                 tick: self.tick,
+                base: since,
+                checksum: self.checksum,
                 added: Vec::new(),
                 removed: Vec::new(),
                 changed: Vec::new(),
             });
         }
 
-        if let Some(oldest) = self.history.front() {
-            if since + 1 < oldest.tick {
-                return Err("requested tick is too old");
-            }
-        }
+        let start_index = self
+            .history
+            .iter()
+            .position(|entry| entry.base == since)
+            .ok_or_else(|| {
+                if self.history.iter().any(|entry| entry.checksum == since) {
+                    DiffError::ChecksumTooOld
+                } else {
+                    DiffError::UnknownChecksum
+                }
+            })?;
 
         let mut added: HashMap<u64, EntitySnapshot> = HashMap::new();
         let mut changed: HashMap<u64, EntitySnapshot> = HashMap::new();
         let mut removed: HashSet<u64> = HashSet::new();
+        let mut current_checksum = since;
+        let mut latest_checksum = since;
 
-        for entry in self.history.iter().filter(|entry| entry.tick > since) {
+        for entry in self.history.iter().skip(start_index) {
+            if entry.base != current_checksum {
+                return Err(DiffError::ChecksumTooOld);
+            }
+
+            current_checksum = entry.checksum;
+            latest_checksum = entry.checksum;
+
             for snapshot in &entry.added {
                 removed.remove(&snapshot.id);
                 changed.remove(&snapshot.id);
@@ -287,6 +334,10 @@ impl WorldStateStore {
             }
         }
 
+        if latest_checksum == since {
+            return Err(DiffError::ChecksumTooOld);
+        }
+
         let mut added: Vec<_> = added.into_values().collect();
         added.sort_by_key(|e| e.id);
         let mut changed: Vec<_> = changed.into_values().collect();
@@ -294,8 +345,10 @@ impl WorldStateStore {
         let mut removed: Vec<_> = removed.into_iter().collect();
         removed.sort_unstable();
 
-        Ok(DiffResponse {
+        Ok(WorldDiff {
             tick: self.tick,
+            base: since,
+            checksum: latest_checksum,
             added,
             removed,
             changed,
@@ -303,39 +356,40 @@ impl WorldStateStore {
     }
 }
 
-async fn get_entities(State(state): State<ServerState>) -> impl IntoResponse {
+async fn get_world_snapshot(State(state): State<ServerState>) -> impl IntoResponse {
     let store = state.world.read().expect("world state lock");
     Json(store.snapshot())
 }
 
-async fn get_diff(
+async fn get_world_diff(
     State(state): State<ServerState>,
-    Query(query): Query<DiffQuery>,
+    Query(query): Query<WorldDiffQuery>,
 ) -> impl IntoResponse {
-    let since = match query.since {
+    let since_str = match query.since {
         Some(value) => value,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: "missing since query parameter".to_string(),
-                }),
-            )
-                .into_response();
-        }
+        None => return diff_error_response(DiffError::MissingSince),
+    };
+
+    let checksum = match since_str.parse::<Checksum>() {
+        Ok(value) => value,
+        Err(_) => return diff_error_response(DiffError::ParseError),
     };
 
     let store = state.world.read().expect("world state lock");
-    match store.diff_since(since) {
+    match store.diff_since(checksum) {
         Ok(diff) => Json(diff).into_response(),
-        Err(message) => (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: message.to_string(),
-            }),
-        )
-            .into_response(),
+        Err(err) => diff_error_response(err),
     }
+}
+
+fn diff_error_response(err: DiffError) -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ErrorResponse {
+            error: err.message().to_string(),
+        }),
+    )
+        .into_response()
 }
 
 async fn post_intent(
