@@ -6,3 +6,5 @@ torch
 torchvision
 Pillow
 onnxruntime
+requests
+timm
