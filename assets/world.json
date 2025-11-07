@@ -1,0 +1,45 @@
+{
+  "version": "2024-06-01",
+  "checksum": "00000000000000000000000000000000",
+  "camera": {
+    "transform": {
+      "translation": [0.0, 6.0, 12.0],
+      "rotation_euler": [-0.35, 0.0, 0.0]
+    },
+    "projection": {
+      "type": "perspective",
+      "fov_degrees": 60.0,
+      "near": 0.1,
+      "far": 1000.0
+    }
+  },
+  "entities": [
+    {
+      "id": "player",
+      "components": {
+        "transform": {
+          "translation": [0.0, 0.0, 0.0],
+          "rotation_euler": [0.0, 0.0, 0.0]
+        },
+        "mesh": "capsule",
+        "material": "avatars/default"
+      }
+    },
+    {
+      "id": "light-key",
+      "components": {
+        "transform": {
+          "translation": [4.0, 8.0, 6.0]
+        },
+        "light": {
+          "type": "directional",
+          "intensity": 12000.0
+        }
+      }
+    }
+  ],
+  "flags": {
+    "recording": false,
+    "http_server": "127.0.0.1:8787"
+  }
+}

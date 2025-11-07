@@ -8,6 +8,9 @@ This repository contains the **Nexus** Cargo workspace. It hosts shared librarie
 - `crates/http_api` – Axum-based HTTP API that mirrors the Bevy world's state and accepts intents.
 - `crates/world_state` – serializable world snapshots, diffs, and checksum utilities.
 - `apps/app` – Bevy application that opens a demo-friendly window with HUD and HTTP hooks.
+- `docs/ProjectBrain.md` – overview of the multi-agent workflow, prompts, and runtime loop supporting Nexus.
+- `codex/` – prompts and task definitions that guide architect, builder, critic, and runner personas.
+- `runtime/`, `router/`, `perception/`, `assets/` – shared infrastructure for the multi-agent loop.
 
 ## Prerequisites
 
