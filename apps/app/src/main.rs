@@ -1,5 +1,5 @@
 use anchor::{AnchorPlugin, SimulationMode};
-use app_core::{HudPlugin, PerceptionBridgePlugin};
+use app_core::{AvatarPlugin, HudPlugin, PerceptionBridgePlugin};
 use bevy::prelude::shape;
 use bevy::{
     asset::AssetPlugin,
@@ -99,6 +99,7 @@ fn main() {
         HttpApiPlugin::new(cli.bind),
         HudPlugin,
         PerceptionBridgePlugin,
+        AvatarPlugin,
     ))
     .add_systems(Startup, setup)
     .add_systems(Update, (exit_on_esc, exit_on_duration))
