@@ -186,7 +186,9 @@ async fn run_server(state: ServerState, bind_addr: SocketAddr) -> Result<(), any
 fn pump_intents(mut receiver: ResMut<IntentReceiver>, mut writer: EventWriter<Intent>) {
     loop {
         match receiver.receiver.try_recv() {
-            Ok(intent) => writer.send(intent),
+            Ok(intent) => {
+                let _ = writer.send(intent);
+            }
             Err(crossbeam_channel::TryRecvError::Empty) => break,
             Err(crossbeam_channel::TryRecvError::Disconnected) => {
                 warn!("intent channel disconnected");

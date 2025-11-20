@@ -16,7 +16,7 @@ bevy = { version = "0.14", default-features = false, features = [
     "bevy_render",
     "bevy_sprite",
     "bevy_winit",
-    "multi-threaded"
+    "multi_threaded"
 ] }
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
@@ -30,3 +30,4 @@ crossbeam-channel = "0.5"
 anchor = { path = "crates/anchor" }
 http_api = { path = "crates/http_api" }
 app_core = { path = "crates/app" }
+world_state = { path = "crates/world_state" }

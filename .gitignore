@@ -1,0 +1,38 @@
+# Rust build artifacts
+target/
+Cargo.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+uvicorn*.log
+
+# Perception models (large files)
+perception/models/*.onnx
+!perception/models/.gitkeep
+
+# Runtime state files
+runtime/world.json
+perception/state.json
+

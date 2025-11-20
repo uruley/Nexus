@@ -1,19 +1,17 @@
 use anchor::{AnchorPlugin, SimulationMode};
 use app_core::{HudPlugin, PerceptionBridgePlugin};
-use bevy::prelude::shape;
 use bevy::{
     asset::AssetPlugin,
-    core_pipeline::{clear_color::ClearColorConfig, core_3d::Camera3dBundle},
+    core_pipeline::core_3d::Camera3dBundle,
     math::primitives::Plane3d,
     prelude::*,
-    render::camera::{PerspectiveProjection, Projection},
+    render::camera::{ClearColorConfig, PerspectiveProjection, Projection},
     window::{
         MonitorSelection, PresentMode, Window, WindowPlugin, WindowPosition, WindowResolution,
     },
     winit::WinitPlugin,
 };
 use clap::Parser;
-use http_api::HttpApiPlugin;
 use std::{
     net::SocketAddr,
     path::PathBuf,
@@ -77,8 +75,6 @@ fn main() {
         MinimalPlugins,
         TransformPlugin,
         HierarchyPlugin,
-        DiagnosticsPlugin,
-        InputPlugin,
         AssetPlugin::default(),
         WindowPlugin {
             primary_window: Some(Window {
@@ -90,13 +86,12 @@ fn main() {
             }),
             ..default()
         },
-        WinitPlugin::default(),
+        WinitPlugin::<bevy::winit::WakeUp>::default(),
         bevy::render::RenderPlugin::default(),
         bevy::core_pipeline::CorePipelinePlugin::default(),
         bevy::sprite::SpritePlugin::default(),
         bevy::pbr::PbrPlugin::default(),
         AnchorPlugin::default(),
-        HttpApiPlugin::new(cli.bind),
         HudPlugin,
         PerceptionBridgePlugin,
     ))
@@ -160,7 +155,7 @@ fn setup(
 
     commands
         .spawn(PbrBundle {
-            mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
+            mesh: meshes.add(Mesh::from(Cuboid::new(1.0, 1.0, 1.0))),
             material: materials.add(StandardMaterial {
                 base_color: Color::srgb(0.7, 0.85, 1.0),
                 perceptual_roughness: 0.5,

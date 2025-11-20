@@ -2,11 +2,10 @@
 
 Usage:
     # PowerShell
-    $env:MOVENET_URL="https://example.com/movenet_thunder.onnx"
-    py perception/scripts/download_movenet.py
+    python perception/scripts/download_movenet.py
 
 Environment variables:
-    MOVENET_URL   (required) - remote URL of the ONNX file
+    MOVENET_URL   (optional) - override remote URL of the ONNX file
     MOVENET_ONNX  (optional) - destination path (default: perception/models/movenet_thunder.onnx)
 """
 
@@ -20,7 +19,10 @@ import requests
 
 
 CHUNK_SIZE = 1 << 15  # 32 KiB
-DEFAULT_DEST = Path("perception/models/movenet_thunder.onnx")
+# Resolve the repository root regardless of the working directory used to invoke the script.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_DEST = REPO_ROOT / "perception" / "models" / "movenet_thunder.onnx"
+DEFAULT_MOVENET_URL = "https://huggingface.co/Xenova/movenet-singlepose-thunder/resolve/main/onnx/model.onnx"
 
 
 def download(url: str, destination: Path) -> None:
@@ -57,12 +59,13 @@ def download(url: str, destination: Path) -> None:
 
 
 def main() -> int:
-    url = os.getenv("MOVENET_URL")
-    if not url:
-        print("MOVENET_URL environment variable is required", file=sys.stderr)
-        return 1
-
-    destination = Path(os.getenv("MOVENET_ONNX", str(DEFAULT_DEST)))
+    url = os.getenv("MOVENET_URL", DEFAULT_MOVENET_URL)
+    destination_raw = os.getenv("MOVENET_ONNX")
+    destination = (
+        Path(destination_raw).expanduser()
+        if destination_raw
+        else DEFAULT_DEST
+    )
     try:
         download(url, destination)
     except Exception as exc:  # pragma: no cover - network dependent

@@ -76,7 +76,7 @@ pub(crate) fn init_metrics(app: &mut App) {
         .add_systems(FixedFirst, anchor_step_start)
         .add_systems(FixedLast, anchor_step_end);
 
-    if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
+    if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
         render_app.insert_resource(shared);
         render_app.add_systems(Render, finish_render_timer.in_set(RenderSet::Cleanup));
     }

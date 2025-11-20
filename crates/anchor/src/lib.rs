@@ -125,7 +125,7 @@ impl ReplayState {
             .with_context(|| format!("failed to open replay file at {}", path.display()))?;
         let reader = BufReader::new(file);
 
-        let mut frames = VecDeque::new();
+        let mut frames: VecDeque<RecordedFrame> = VecDeque::new();
         for (index, line) in reader.lines().enumerate() {
             let line = line.context("failed to read line from replay file")?;
             if line.trim().is_empty() {
@@ -159,7 +159,7 @@ impl ReplayState {
 }
 
 fn initialize_mode(app: &mut App) -> SimulationMode {
-    let mut world = app.world_mut();
+    let world = app.world_mut();
     if !world.contains_resource::<SimulationMode>() {
         world.insert_resource(SimulationMode::default());
     }
@@ -282,9 +282,7 @@ fn spawn_entity(
     let velocity = Vec3::from_array(args.vel);
     let size = Vec3::from_array(args.size);
 
-    let mesh = meshes.add(Mesh::from(bevy::render::mesh::shape::Box::new(
-        size.x, size.y, size.z,
-    )));
+    let mesh = meshes.add(Mesh::from(Cuboid::new(size.x, size.y, size.z)));
     let material = materials.add(StandardMaterial {
         base_color: Color::srgb(0.4, 0.7, 1.0),
         ..default()

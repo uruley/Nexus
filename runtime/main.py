@@ -11,7 +11,7 @@ import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Sequence, Optional
 
 DEFAULT_WORLD = {
     "entities": [],
@@ -87,6 +87,24 @@ def load_patches(paths: Iterable[Path]) -> List[Patch]:
     return patches
 
 
+def read_perception_state() -> Optional[Dict[str, Any]]:
+    """Attempt to read perception/state.json, returning its contents or None.
+
+    Never raises; logs a short warning instead.
+    """
+    perception_state_path = Path(__file__).parents[1] / "perception" / "state.json"
+    if not perception_state_path.exists():
+        print("Perception: no state.json available")
+        return None
+
+    try:
+        with perception_state_path.open("r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except Exception as exc:  # pragma: no cover - defensive I/O
+        print(f"Perception: failed to read state.json: {exc}")
+        return None
+
+
 def apply_patch(world: Dict[str, Any], patch: Patch) -> None:
     """Mutate the world in-place based on a single patch."""
     if patch.type == "spawn_entity":
@@ -153,6 +171,23 @@ def main(argv: Sequence[str] | None = None) -> Dict[str, Any]:
         print(f"Applied {patch.id} ({patch.type}) in {patch_elapsed:.3f} ms")
 
     write_world(world_path, world)
+
+    # After world update, read latest perception state (if available)
+    perception_state = read_perception_state()
+    if perception_state is not None:
+        persons = perception_state.get("persons") or []
+        count = len(persons)
+        if count == 0:
+            print("Perception: 0 persons")
+        else:
+            first = persons[0]
+            keypoints = first.get("keypoints") or []
+            if keypoints:
+                avg_score = sum(k.get("c", 0.0) for k in keypoints) / len(keypoints)
+                print(f"Perception: {count} persons, avg_score={avg_score:.2f}")
+            else:
+                print(f"Perception: {count} persons, avg_score=N/A")
+
     frame_elapsed = (time.perf_counter() - frame_start) * 1000
     print(f"Frame processed in {frame_elapsed:.3f} ms for {len(patches)} patch(es)")
     return world
