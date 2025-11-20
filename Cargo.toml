@@ -6,7 +6,7 @@
      "crates/world_introspection",
      "crates/perf_hud",
      "crates/unified_field",
-     "apps/nexus_desktop",
+     "apps/nexus_desktop", "crates/world_state", "crates/anchor",
  ]
 
  [workspace.package]
