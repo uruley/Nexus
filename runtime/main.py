@@ -6,7 +6,9 @@ import time
 from pathlib import Path
 from typing import Iterable, List
 
-WORLD_PATH = Path("apps/nexus_desktop/assets/world.json")
+RUNTIME_DIR = Path(__file__).resolve().parent
+REPO_ROOT = RUNTIME_DIR.parent
+WORLD_PATH = REPO_ROOT / "apps" / "nexus_desktop" / "assets" / "world.json"
 POLL_INTERVAL_SECONDS = 0.2
 
 
@@ -253,6 +255,8 @@ def simulate_patches(patch_path: Path, world_path: Path) -> None:
 
 def main() -> None:
     args = parse_args()
+
+    log(f"Using world file: {args.world.resolve()}")
 
     if args.watch:
         watch_patch_file(args.watch, args.world, args.interval)
