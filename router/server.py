@@ -15,10 +15,18 @@ DEFAULT_ENTITY_ID = "entity:cube:001"
 
 
 def ensure_generated_dir() -> None:
+    """Ensure the router/generated directory exists."""
+
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def text_to_patches(text: str) -> List[dict]:
+    """Convert a natural language command into schema-compliant patches.
+
+    The router always returns a list so the runtime can handle single and
+    multi-patch commands uniformly. All patch shapes mirror router/schema.json.
+    """
+
     normalized = " ".join(text.lower().split())
 
     move_vectors = {
@@ -41,12 +49,23 @@ def text_to_patches(text: str) -> List[dict]:
         ]
 
     if normalized == "spawn cube":
+        entity_id = "entity:newcube"
         return [
             {
-                "id": "entity:cube:new",
+                "id": entity_id,
                 "type": "spawn_entity",
                 "data": {"kind": "cube"},
-            }
+            },
+            {
+                "id": entity_id,
+                "type": "move_entity",
+                "data": {"dx": 0.0, "dy": 1.0, "dz": 0.0},
+            },
+            {
+                "id": entity_id,
+                "type": "set_color",
+                "data": {"color": [1.0, 1.0, 1.0]},
+            },
         ]
 
     if normalized == "delete cube":
@@ -76,11 +95,16 @@ def text_to_patches(text: str) -> List[dict]:
     return []
 
 
-def write_patches(patches: List[dict]) -> dict:
+def write_patches(patches: List[dict]) -> List[dict]:
+    """Persist the patches to router/generated/command.json.
+
+    The payload is always written as a JSON list to keep the runtime contract
+    consistent regardless of how many patches were generated.
+    """
+
     ensure_generated_dir()
-    payload: dict | List[dict] = patches[0] if len(patches) == 1 else patches
-    COMMAND_PATH.write_text(json.dumps(payload, indent=2))
-    return payload
+    COMMAND_PATH.write_text(json.dumps(patches, indent=2))
+    return patches
 
 
 @app.get("/health")

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nexus Router Command UI</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 720px;
+        margin: 2rem auto;
+        color: #111;
+      }
+      textarea {
+        width: 100%;
+        min-height: 80px;
+        font-size: 16px;
+        padding: 0.5rem;
+      }
+      button {
+        padding: 0.5rem 1rem;
+        font-size: 16px;
+        margin-top: 0.5rem;
+      }
+      pre {
+        background: #f6f6f6;
+        padding: 1rem;
+        border-radius: 6px;
+        overflow-x: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Nexus Command Router</h1>
+    <p>Enter a natural language command and send it to the router.</p>
+    <textarea id="command" placeholder="e.g., spawn cube"></textarea>
+    <div>
+      <button id="submit">Send</button>
+    </div>
+    <h2>Router Response</h2>
+    <pre id="output">Waiting for command...</pre>
+
+    <script>
+      const textarea = document.getElementById("command");
+      const output = document.getElementById("output");
+      document.getElementById("submit").addEventListener("click", async () => {
+        const text = textarea.value.trim();
+        if (!text) {
+          output.textContent = "Please enter a command.";
+          return;
+        }
+        output.textContent = "Sending...";
+        try {
+          const response = await fetch(`/command?text=${encodeURIComponent(text)}`);
+          const payload = await response.json();
+          if (!response.ok) {
+            output.textContent = JSON.stringify(payload, null, 2);
+            return;
+          }
+          output.textContent = JSON.stringify(payload, null, 2);
+        } catch (err) {
+          output.textContent = `Failed to reach router: ${err}`;
+        }
+      });
+    </script>
+  </body>
+</html>
