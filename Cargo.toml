@@ -1,12 +1,12 @@
  [workspace]
  resolver = "2"
- members = [
-     "crates/anchor_core",
-     "crates/intent_api",
-     "crates/world_introspection",
-    "crates/perf_hud",
-    "crates/unified_field",
-    "apps/nexus_desktop", "crates/world_state", "crates/anchor", "crates/neural_renderer",
+members = [
+    "crates/anchor_core",
+    "crates/intent_api",
+    "crates/world_introspection",
+   "crates/perf_hud",
+   "crates/unified_field",
+    "apps/nexus_desktop", "crates/world_state", "crates/anchor", "crates/neural_renderer", "crates/motion_compiler",
 ]
 
  [workspace.package]
