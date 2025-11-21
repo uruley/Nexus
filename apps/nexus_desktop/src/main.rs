@@ -3,8 +3,7 @@ use anyhow::Result;
 use bevy::app::App;
 use bevy::core_pipeline::core_2d::Camera2dBundle;
 use bevy::prelude::*;
-use bevy::window::{PrimaryWindow, WindowPlugin};
-use bevy::winit::WinitPlugin;
+use bevy::window::{PrimaryWindow, Window, WindowPlugin};
 use motion_compiler as _;
 use neural_renderer::{
     build_renderer_from_config, render_request_from_world, spawn_debug_overlay, NeuralOverlayLabel,
@@ -121,15 +120,18 @@ fn main() -> Result<()> {
         .insert_resource(WorldSyncState::new(WORLD_PATH))
         .insert_resource(build_renderer_resource())
         .insert_resource(NeuralRendererDebug::default())
-        .add_plugins((
-            MinimalPlugins,
-            WindowPlugin::default(),
-            WinitPlugin::default(),
-            TransformPlugin,
-            RenderPlugin::default(),
-            CorePipelinePlugin::default(),
-            SpritePlugin::default(),
-        ))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "Nexus Engine".into(),
+                        resolution: (1280.0, 720.0).into(),
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .disable::<bevy::log::LogPlugin>(),
+        )
         .add_plugins(AnchorPlugin)
         .add_systems(Startup, (setup_scene, log_startup))
         .add_systems(
@@ -291,17 +293,17 @@ fn handle_neural_debug_toggle(
 ) {
     if input.just_pressed(KeyCode::KeyN) {
         debug.enabled = !debug.enabled;
+        let enabled = debug.enabled;
         info!(
             target: "nexus_desktop",
             "Neural renderer debug mode {}",
-            if debug.enabled { "enabled" } else { "disabled" }
+            if enabled { "enabled" } else { "disabled" }
         );
     }
 }
 
 fn update_neural_debug_overlay(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
     mut debug: ResMut<NeuralRendererDebug>,
     existing: Query<Entity, With<NeuralOverlayLabel>>,
 ) {
@@ -311,7 +313,7 @@ fn update_neural_debug_overlay(
             .and_then(|entity| existing.get(entity).ok())
             .is_none()
         {
-            let entity = spawn_debug_overlay(&mut commands, &asset_server);
+            let entity = spawn_debug_overlay(&mut commands);
             debug.overlay = Some(entity);
         }
     } else {

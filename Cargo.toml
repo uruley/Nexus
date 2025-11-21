@@ -23,6 +23,8 @@ bevy = { version = "0.14", default-features = false, features = [
     "bevy_render",
     "bevy_sprite",
     "bevy_core_pipeline",
+    "bevy_ui",
+    "bevy_text",
 ] }
 anyhow = "1"
 thiserror = "1"

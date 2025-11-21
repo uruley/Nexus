@@ -11,9 +11,9 @@ use tracing::info;
 use world_state::{Camera, Light, WorldEntity, WorldSnapshot};
 
 #[cfg(feature = "bevy")]
-use bevy::prelude::{
-    AssetServer, Color, Commands, Component, Entity, PositionType, Style, Text, TextAlignment,
-    TextBundle, TextStyle, Val,
+use bevy::{
+    prelude::{Color, Commands, Component, Entity, NodeBundle},
+    ui::{PositionType, Style, Val},
 };
 
 pub type RenderResult<T> = Result<T, RenderError>;
@@ -154,26 +154,20 @@ pub struct NeuralOverlayLabel;
 ///
 /// Returns the spawned [`Entity`] so the caller can track or despawn it later.
 #[cfg(feature = "bevy")]
-pub fn spawn_debug_overlay(commands: &mut Commands, asset_server: &AssetServer) -> Entity {
+pub fn spawn_debug_overlay(commands: &mut Commands) -> Entity {
     commands
         .spawn((
             NeuralOverlayLabel,
-            TextBundle {
-                text: Text::from_section(
-                    "NEURAL MODE",
-                    TextStyle {
-                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                        font_size: 28.0,
-                        color: Color::srgb(1.0, 0.3, 0.6),
-                    },
-                )
-                .with_alignment(TextAlignment::Left),
+            NodeBundle {
                 style: Style {
                     position_type: PositionType::Absolute,
                     left: Val::Px(16.0),
                     top: Val::Px(16.0),
+                    width: Val::Px(140.0),
+                    height: Val::Px(40.0),
                     ..Default::default()
                 },
+                background_color: Color::srgb(1.0, 0.3, 0.6).into(),
                 ..Default::default()
             },
         ))
