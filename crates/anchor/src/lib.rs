@@ -11,6 +11,7 @@ pub struct AnchorPlugin;
 
 impl Plugin for AnchorPlugin {
     fn build(&self, app: &mut App) {
+        // Register the physics types and systems for the anchor world.
         app.register_type::<Velocity>()
             .register_type::<Collider>()
             .add_systems(
