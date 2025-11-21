@@ -1,0 +1,141 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Nexus Router Patch",
+  "description": "Schema for command router patches applied to the world state.",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/patch"
+    },
+    {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/patch"
+      }
+    }
+  ],
+  "definitions": {
+    "vector3": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "color": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "patch": {
+      "type": "object",
+      "required": ["id", "type", "data"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "spawn_entity",
+            "move_entity",
+            "delete_entity",
+            "move_camera",
+            "set_light",
+            "set_color"
+          ]
+        },
+        "data": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/spawn_entity"
+            },
+            {
+              "$ref": "#/definitions/move_entity"
+            },
+            {
+              "$ref": "#/definitions/delete_entity"
+            },
+            {
+              "$ref": "#/definitions/move_camera"
+            },
+            {
+              "$ref": "#/definitions/set_light"
+            },
+            {
+              "$ref": "#/definitions/set_color"
+            }
+          ]
+        }
+      }
+    },
+    "spawn_entity": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        }
+      },
+      "required": ["kind"]
+    },
+    "move_entity": {
+      "type": "object",
+      "properties": {
+        "dx": {
+          "type": "number"
+        },
+        "dy": {
+          "type": "number"
+        },
+        "dz": {
+          "type": "number"
+        }
+      },
+      "required": ["dx", "dy", "dz"]
+    },
+    "delete_entity": {
+      "type": "object"
+    },
+    "move_camera": {
+      "type": "object",
+      "properties": {
+        "dx": {
+          "type": "number"
+        },
+        "dy": {
+          "type": "number"
+        },
+        "dz": {
+          "type": "number"
+        }
+      },
+      "required": ["dx", "dy", "dz"]
+    },
+    "set_light": {
+      "type": "object",
+      "properties": {
+        "intensity": {
+          "type": "number"
+        },
+        "color": {
+          "$ref": "#/definitions/color"
+        }
+      },
+      "required": ["intensity", "color"]
+    },
+    "set_color": {
+      "type": "object",
+      "properties": {
+        "color": {
+          "$ref": "#/definitions/color"
+        }
+      },
+      "required": ["color"]
+    }
+  }
+}
