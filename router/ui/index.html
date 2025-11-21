@@ -98,6 +98,10 @@ Manual flow (M3 Phase 3 — Command UI)
         <span class="label">History:</span>
         <ul id="history"></ul>
       </div>
+      <div style="margin-top: 0.5rem;">
+        <span class="label">Response status:</span>
+        <span id="status">Waiting for request...</span>
+      </div>
     </div>
 
     <div class="panel">
@@ -111,6 +115,7 @@ Manual flow (M3 Phase 3 — Command UI)
       const patchesEl = document.getElementById("patches");
       const errorEl = document.getElementById("error");
       const lastCommandEl = document.getElementById("last-command");
+      const statusEl = document.getElementById("status");
       const historyEl = document.getElementById("history");
       const history = [];
 
@@ -136,6 +141,7 @@ Manual flow (M3 Phase 3 — Command UI)
         }
 
         patchesEl.textContent = "Sending...";
+        statusEl.textContent = "Sending";
         errorEl.textContent = "";
         lastCommandEl.textContent = text;
 
@@ -143,6 +149,7 @@ Manual flow (M3 Phase 3 — Command UI)
           const response = await fetch(`/command?text=${encodeURIComponent(text)}`);
           const payload = await response.json();
 
+          statusEl.textContent = `${response.status} ${response.statusText}`;
           if (!response.ok) {
             errorEl.textContent = JSON.stringify(payload, null, 2);
           } else {
@@ -155,6 +162,7 @@ Manual flow (M3 Phase 3 — Command UI)
         } catch (err) {
           errorEl.textContent = `Failed to reach router: ${err}`;
           patchesEl.textContent = "";
+          statusEl.textContent = "Request failed";
         }
       }
 
