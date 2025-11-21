@@ -1,8 +1,20 @@
+//! Minimal neural renderer abstraction used by Nexus.
+//!
+//! This crate currently provides a mock backend that turns [`world_state::WorldSnapshot`]
+//! data into a simple textual summary. It can also expose Bevy-friendly helper functions
+//! for debug overlays when the optional `bevy` feature is enabled.
+
 use std::fmt::Display;
 
 use thiserror::Error;
 use tracing::info;
 use world_state::{Camera, Light, WorldEntity, WorldSnapshot};
+
+#[cfg(feature = "bevy")]
+use bevy::prelude::{
+    AssetServer, Color, Commands, Component, Entity, PositionType, Style, Text, TextAlignment,
+    TextBundle, TextStyle, Val,
+};
 
 pub type RenderResult<T> = Result<T, RenderError>;
 
@@ -132,6 +144,40 @@ pub fn render_request_from_world(world: &WorldSnapshot, width: u32, height: u32)
             })
             .collect(),
     }
+}
+
+#[cfg(feature = "bevy")]
+#[derive(Component)]
+pub struct NeuralOverlayLabel;
+
+/// Spawn a simple on-screen overlay that highlights when neural rendering is active.
+///
+/// Returns the spawned [`Entity`] so the caller can track or despawn it later.
+#[cfg(feature = "bevy")]
+pub fn spawn_debug_overlay(commands: &mut Commands, asset_server: &AssetServer) -> Entity {
+    commands
+        .spawn((
+            NeuralOverlayLabel,
+            TextBundle {
+                text: Text::from_section(
+                    "NEURAL MODE",
+                    TextStyle {
+                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                        font_size: 28.0,
+                        color: Color::srgb(1.0, 0.3, 0.6),
+                    },
+                )
+                .with_alignment(TextAlignment::Left),
+                style: Style {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(16.0),
+                    top: Val::Px(16.0),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        ))
+        .id()
 }
 
 #[cfg(test)]
