@@ -12,6 +12,7 @@ app = FastAPI(title="Nexus Command Router")
 BASE_DIR = Path(__file__).resolve().parent
 GENERATED_DIR = BASE_DIR / "generated"
 UI_PATH = BASE_DIR / "ui" / "index.html"
+UI_HTML = UI_PATH.read_text(encoding="utf-8") if UI_PATH.exists() else None
 COMMAND_PATH = GENERATED_DIR / "command.json"
 DEFAULT_ENTITY_ID = "entity:cube:001"
 
@@ -130,13 +131,13 @@ def root() -> RedirectResponse:
 def ui() -> HTMLResponse:
     """Serve the command UI HTML file from router/ui/index.html."""
 
-    if not UI_PATH.exists():
+    if UI_HTML is None:
         return HTMLResponse(
             status_code=500,
             content="<h1>UI missing</h1><p>router/ui/index.html not found.</p>",
         )
 
-    return HTMLResponse(content=UI_PATH.read_text(encoding="utf-8"))
+    return HTMLResponse(content=UI_HTML)
 
 
 @app.get("/health")
