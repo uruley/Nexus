@@ -5,13 +5,25 @@ from pathlib import Path
 from typing import List
 
 from fastapi import FastAPI, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 app = FastAPI(title="Nexus Command Router")
 
-GENERATED_DIR = Path(__file__).resolve().parent / "generated"
+BASE_DIR = Path(__file__).resolve().parent
+GENERATED_DIR = BASE_DIR / "generated"
+UI_PATH = BASE_DIR / "ui" / "index.html"
 COMMAND_PATH = GENERATED_DIR / "command.json"
 DEFAULT_ENTITY_ID = "entity:cube:001"
+
+
+# Command UI manual flow (M3 Phase 3)
+# 1) Start router:
+#    uvicorn router.server:app --host 127.0.0.1 --port 5056 --reload
+# 2) Open in browser:
+#    http://127.0.0.1:5056/ui
+# 3) Type commands like: move cube up, make cube red, spawn cube, delete cube
+# 4) Observe patches JSON in the UI; runtime/main.py (watch mode) applies patches;
+#    Bevy app updates the scene from those patches.
 
 
 def ensure_generated_dir() -> None:
@@ -105,6 +117,26 @@ def write_patches(patches: List[dict]) -> List[dict]:
     ensure_generated_dir()
     COMMAND_PATH.write_text(json.dumps(patches, indent=2))
     return patches
+
+
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    """Redirect the bare root to the UI for convenience."""
+
+    return RedirectResponse(url="/ui")
+
+
+@app.get("/ui", response_class=HTMLResponse, include_in_schema=False)
+def ui() -> HTMLResponse:
+    """Serve the command UI HTML file from router/ui/index.html."""
+
+    if not UI_PATH.exists():
+        return HTMLResponse(
+            status_code=500,
+            content="<h1>UI missing</h1><p>router/ui/index.html not found.</p>",
+        )
+
+    return HTMLResponse(content=UI_PATH.read_text(encoding="utf-8"))
 
 
 @app.get("/health")

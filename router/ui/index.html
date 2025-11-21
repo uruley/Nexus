@@ -1,65 +1,168 @@
 <!doctype html>
+<!--
+Manual flow (M3 Phase 3 — Command UI)
+1) Start router:
+   uvicorn router.server:app --host 127.0.0.1 --port 5056 --reload
+2) Open in browser:
+   http://127.0.0.1:5056/ui
+3) Type commands like: move cube up, make cube red, spawn cube, delete cube
+4) Observe: patches JSON below; runtime/main.py (watch mode) applies patches;
+   Bevy app updates the scene based on those patches.
+-->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Nexus Router Command UI</title>
     <style>
+      :root {
+        color-scheme: light;
+      }
       body {
         font-family: Arial, sans-serif;
-        max-width: 720px;
+        max-width: 840px;
         margin: 2rem auto;
         color: #111;
+        padding: 0 1rem;
       }
-      textarea {
-        width: 100%;
-        min-height: 80px;
-        font-size: 16px;
-        padding: 0.5rem;
+      h1 {
+        margin-top: 0;
       }
-      button {
-        padding: 0.5rem 1rem;
+      .row {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+      }
+      #command-input {
+        flex: 1;
+        padding: 0.6rem 0.75rem;
         font-size: 16px;
-        margin-top: 0.5rem;
+      }
+      #send-button {
+        padding: 0.65rem 1.1rem;
+        font-size: 16px;
+      }
+      .panel {
+        background: #f6f6f6;
+        border-radius: 6px;
+        padding: 1rem;
+        margin-top: 1rem;
+        border: 1px solid #e5e5e5;
+      }
+      .label {
+        font-weight: bold;
       }
       pre {
-        background: #f6f6f6;
-        padding: 1rem;
-        border-radius: 6px;
+        background: #fff;
+        padding: 0.75rem;
+        border-radius: 4px;
         overflow-x: auto;
+        margin: 0.4rem 0 0;
+        border: 1px solid #ddd;
+      }
+      #error {
+        color: #b20000;
+        white-space: pre-wrap;
+        margin-top: 0.5rem;
+      }
+      #history {
+        list-style: disc;
+        padding-left: 1.5rem;
+        margin: 0.25rem 0 0;
+      }
+      #history li {
+        cursor: pointer;
       }
     </style>
   </head>
   <body>
     <h1>Nexus Command Router</h1>
-    <p>Enter a natural language command and send it to the router.</p>
-    <textarea id="command" placeholder="e.g., spawn cube"></textarea>
-    <div>
-      <button id="submit">Send</button>
+    <p>Send a natural language command to <code>/command</code> and view the resulting patches.</p>
+
+    <div class="panel">
+      <div class="row">
+        <input
+          id="command-input"
+          type="text"
+          placeholder="e.g., spawn cube"
+          autocomplete="off"
+        />
+        <button id="send-button">Send</button>
+      </div>
+      <div id="error" aria-live="polite"></div>
+      <div style="margin-top: 0.75rem;">
+        <span class="label">Last command:</span>
+        <span id="last-command">(none)</span>
+      </div>
+      <div style="margin-top: 0.5rem;">
+        <span class="label">History:</span>
+        <ul id="history"></ul>
+      </div>
     </div>
-    <h2>Router Response</h2>
-    <pre id="output">Waiting for command...</pre>
+
+    <div class="panel">
+      <div class="label">Patches JSON</div>
+      <pre id="patches">Waiting for command...</pre>
+    </div>
 
     <script>
-      const textarea = document.getElementById("command");
-      const output = document.getElementById("output");
-      document.getElementById("submit").addEventListener("click", async () => {
-        const text = textarea.value.trim();
+      const commandInput = document.getElementById("command-input");
+      const sendButton = document.getElementById("send-button");
+      const patchesEl = document.getElementById("patches");
+      const errorEl = document.getElementById("error");
+      const lastCommandEl = document.getElementById("last-command");
+      const historyEl = document.getElementById("history");
+      const history = [];
+
+      function renderHistory() {
+        historyEl.innerHTML = "";
+        history.slice(-10).forEach((item) => {
+          const li = document.createElement("li");
+          li.textContent = item;
+          li.title = "Click to reuse";
+          li.onclick = () => {
+            commandInput.value = item;
+            commandInput.focus();
+          };
+          historyEl.prepend(li);
+        });
+      }
+
+      async function sendCommand() {
+        const text = commandInput.value.trim();
         if (!text) {
-          output.textContent = "Please enter a command.";
+          errorEl.textContent = "Please enter a command.";
           return;
         }
-        output.textContent = "Sending...";
+
+        patchesEl.textContent = "Sending...";
+        errorEl.textContent = "";
+        lastCommandEl.textContent = text;
+
         try {
           const response = await fetch(`/command?text=${encodeURIComponent(text)}`);
           const payload = await response.json();
+
           if (!response.ok) {
-            output.textContent = JSON.stringify(payload, null, 2);
-            return;
+            errorEl.textContent = JSON.stringify(payload, null, 2);
+          } else {
+            errorEl.textContent = "";
+            history.push(text);
+            renderHistory();
           }
-          output.textContent = JSON.stringify(payload, null, 2);
+
+          patchesEl.textContent = JSON.stringify(payload, null, 2);
         } catch (err) {
-          output.textContent = `Failed to reach router: ${err}`;
+          errorEl.textContent = `Failed to reach router: ${err}`;
+          patchesEl.textContent = "";
+        }
+      }
+
+      sendButton.addEventListener("click", sendCommand);
+      commandInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          sendCommand();
         }
       });
     </script>
