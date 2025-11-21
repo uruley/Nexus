@@ -259,6 +259,8 @@ def main() -> None:
     args = parse_args()
     log(f"Using world file: {args.world.resolve()}")
 
+    log(f"Using world file: {args.world.resolve()}")
+
     if args.watch:
         watch_patch_file(args.watch, args.world, args.interval)
         return

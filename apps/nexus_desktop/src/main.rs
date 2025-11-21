@@ -4,8 +4,11 @@ use bevy::app::App;
 use bevy::core_pipeline::core_2d::Camera2dBundle;
 use bevy::prelude::*;
 use bevy::window::{PrimaryWindow, WindowPlugin};
+use bevy::winit::WinitPlugin;
+use motion_compiler as _;
 use neural_renderer::{
-    build_renderer_from_config, render_request_from_world, NeuralRendererConfig, RendererBackend,
+    build_renderer_from_config, render_request_from_world, spawn_debug_overlay, NeuralOverlayLabel,
+    NeuralRendererConfig, RendererBackend,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -28,6 +31,12 @@ struct WorldSyncState {
 struct NeuralRendererState {
     renderer: Box<dyn RendererBackend>,
     timer: Timer,
+}
+
+#[derive(Resource, Default)]
+struct NeuralRendererDebug {
+    enabled: bool,
+    overlay: Option<Entity>,
 }
 
 #[derive(Component)]
@@ -111,17 +120,27 @@ fn main() -> Result<()> {
         .insert_resource(ClearColor(base_clear))
         .insert_resource(WorldSyncState::new(WORLD_PATH))
         .insert_resource(build_renderer_resource())
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Nexus Engine".into(),
-                resolution: (1280.0, 720.0).into(),
-                ..default()
-            }),
-            ..default()
-        }).disable::<bevy::log::LogPlugin>())
+        .insert_resource(NeuralRendererDebug::default())
+        .add_plugins((
+            MinimalPlugins,
+            WindowPlugin::default(),
+            WinitPlugin::default(),
+            TransformPlugin,
+            RenderPlugin::default(),
+            CorePipelinePlugin::default(),
+            SpritePlugin::default(),
+        ))
         .add_plugins(AnchorPlugin)
         .add_systems(Startup, (setup_scene, log_startup))
-        .add_systems(Update, (sync_world_file, run_neural_renderer))
+        .add_systems(
+            Update,
+            (
+                sync_world_file,
+                handle_neural_debug_toggle,
+                update_neural_debug_overlay,
+                run_neural_renderer,
+            ),
+        )
         .run();
 
     Ok(())
@@ -235,7 +254,12 @@ fn run_neural_renderer(
     mut state: ResMut<NeuralRendererState>,
     world_state: Res<WorldSyncState>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    debug: Res<NeuralRendererDebug>,
 ) {
+    if !debug.enabled {
+        return;
+    }
+
     state.timer.tick(time.delta());
     if !state.timer.finished() {
         return;
@@ -261,4 +285,40 @@ fn run_neural_renderer(
     }
 }
 
+fn handle_neural_debug_toggle(
+    input: Res<ButtonInput<KeyCode>>,
+    mut debug: ResMut<NeuralRendererDebug>,
+) {
+    if input.just_pressed(KeyCode::KeyN) {
+        debug.enabled = !debug.enabled;
+        info!(
+            target: "nexus_desktop",
+            "Neural renderer debug mode {}",
+            if debug.enabled { "enabled" } else { "disabled" }
+        );
+    }
+}
+
+fn update_neural_debug_overlay(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut debug: ResMut<NeuralRendererDebug>,
+    existing: Query<Entity, With<NeuralOverlayLabel>>,
+) {
+    if debug.enabled {
+        if debug
+            .overlay
+            .and_then(|entity| existing.get(entity).ok())
+            .is_none()
+        {
+            let entity = spawn_debug_overlay(&mut commands, &asset_server);
+            debug.overlay = Some(entity);
+        }
+    } else {
+        for entity in existing.iter() {
+            commands.entity(entity).despawn_recursive();
+        }
+        debug.overlay = None;
+    }
+}
 

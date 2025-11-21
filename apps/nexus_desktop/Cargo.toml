@@ -11,5 +11,6 @@ serde_json = "1"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 anchor = { path = "../../crates/anchor" }
+motion_compiler = { path = "../../crates/motion_compiler" }
 world_state = { path = "../../crates/world_state" }
-neural_renderer = { path = "../../crates/neural_renderer" }
+neural_renderer = { path = "../../crates/neural_renderer", features = ["bevy"] }
