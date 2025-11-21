@@ -1,12 +1,15 @@
 use anchor::{AnchorPlugin, Velocity};
 use anyhow::Result;
 use bevy::app::App;
+use bevy::asset::AssetPlugin;
 use bevy::core_pipeline::core_2d::Camera2dBundle;
 use bevy::core_pipeline::CorePipelinePlugin;
 use bevy::prelude::*;
 use bevy::render::RenderPlugin;
 use bevy::sprite::SpritePlugin;
+use bevy::text::TextPlugin;
 use bevy::transform::TransformPlugin;
+use bevy::ui::UiPlugin;
 use bevy::window::{PrimaryWindow, WindowPlugin};
 use bevy::winit::WinitPlugin;
 use neural_renderer::{
@@ -20,6 +23,12 @@ use tracing::info;
 use world_state::{Collider, WorldSnapshot};
 
 const WORLD_PATH: &str = "apps/nexus_desktop/assets/world.json";
+
+#[derive(Resource, Default)]
+struct DebugHudState {
+    entity_count: usize,
+    last_command: Option<String>,
+}
 
 #[derive(Resource)]
 struct WorldSyncState {
@@ -37,6 +46,14 @@ struct NeuralRendererState {
 
 #[derive(Component)]
 struct WorldEntityId(String);
+
+#[derive(Component)]
+struct HudText;
+
+#[derive(Event)]
+struct RouterCommandEvent {
+    description: String,
+}
 
 impl WorldSyncState {
     fn new(path: impl Into<PathBuf>) -> Self {
@@ -75,18 +92,27 @@ fn main() -> Result<()> {
         .insert_resource(ClearColor(Color::srgb(0.02, 0.02, 0.08)))
         .insert_resource(WorldSyncState::new(WORLD_PATH))
         .insert_resource(build_renderer_resource())
+        .init_resource::<DebugHudState>()
+        .add_event::<RouterCommandEvent>()
         .add_plugins((
             MinimalPlugins,
             WindowPlugin::default(),
             WinitPlugin::default(),
+            AssetPlugin::default(),
             TransformPlugin,
             RenderPlugin::default(),
             CorePipelinePlugin::default(),
             SpritePlugin::default(),
+            TextPlugin::default(),
+            UiPlugin::default(),
         ))
         .add_plugins(AnchorPlugin)
-        .add_systems(Startup, setup_scene)
-        .add_systems(Update, (sync_world_file, run_neural_renderer))
+        .add_systems(Startup, (setup_scene, setup_hud))
+        .add_systems(
+            Update,
+            (sync_world_file, run_neural_renderer, update_hud_text),
+        )
+        .add_systems(Update, capture_router_commands)
         .run();
 
     Ok(())
@@ -94,6 +120,48 @@ fn main() -> Result<()> {
 
 fn setup_scene(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
+}
+
+fn setup_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let font = asset_server.default_font();
+
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                position_type: PositionType::Absolute,
+                top: Val::Px(10.0),
+                left: Val::Px(10.0),
+                ..Default::default()
+            },
+            background_color: Color::NONE.into(),
+            z_index: ZIndex::Global(10),
+            ..Default::default()
+        })
+        .with_children(|parent| {
+            parent.spawn((
+                TextBundle::from_sections([
+                    TextSection::new(
+                        "Entities: 0\n",
+                        TextStyle {
+                            font: font.clone(),
+                            font_size: 16.0,
+                            color: Color::WHITE,
+                            ..Default::default()
+                        },
+                    ),
+                    TextSection::new(
+                        "Last command: (none)",
+                        TextStyle {
+                            font,
+                            font_size: 16.0,
+                            color: Color::GRAY,
+                            ..Default::default()
+                        },
+                    ),
+                ]),
+                HudText,
+            ));
+        });
 }
 
 fn sync_world_file(
@@ -104,6 +172,7 @@ fn sync_world_file(
     mut sprite_query: Query<(&mut Transform, &mut Sprite), With<WorldEntityId>>,
     mut camera_query: Query<&mut Transform, With<Camera>>,
     mut clear_color: ResMut<ClearColor>,
+    mut hud_state: ResMut<DebugHudState>,
 ) {
     state.timer.tick(time.delta());
     if !state.timer.finished() {
@@ -113,6 +182,8 @@ fn sync_world_file(
     let Some(world) = state.read_snapshot() else {
         return;
     };
+
+    hud_state.entity_count = world.entities.len();
 
     let mut entity_map: HashMap<String, Entity> = existing_entities
         .iter()
@@ -181,6 +252,42 @@ fn sync_world_file(
         if let Some(intensity) = light.intensity {
             let clamped = intensity.clamp(0.0, 5.0);
             clear_color.0.set_a((clamped / 5.0).clamp(0.1, 1.0));
+        }
+    }
+}
+
+fn capture_router_commands(
+    mut events: EventReader<RouterCommandEvent>,
+    mut hud_state: ResMut<DebugHudState>,
+) {
+    for event in events.read() {
+        hud_state.last_command = Some(event.description.clone());
+    }
+}
+
+fn update_hud_text(state: Res<DebugHudState>, mut query: Query<&mut Text, With<HudText>>) {
+    if !state.is_changed() {
+        return;
+    }
+
+    let last_command = state
+        .last_command
+        .as_ref()
+        .map(|cmd| cmd.as_str())
+        .unwrap_or("(none)");
+
+    for mut text in &mut query {
+        if let Some(first) = text.sections.get_mut(0) {
+            first.value = format!("Entities: {}\n", state.entity_count);
+        }
+
+        if let Some(second) = text.sections.get_mut(1) {
+            second.value = format!("Last command: {last_command}");
+            second.style.color = if state.last_command.is_some() {
+                Color::WHITE
+            } else {
+                Color::GRAY
+            };
         }
     }
 }

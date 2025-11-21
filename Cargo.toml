@@ -15,10 +15,13 @@ members = [
  [workspace.dependencies]
  bevy = { version = "0.14", default-features = false, features = [
      "bevy_winit",
-     "multi-threaded",
+     "multi_threaded",
      "bevy_render",
      "bevy_sprite",
      "bevy_core_pipeline",
+     "bevy_asset",
+     "bevy_text",
+     "bevy_ui",
  ] }
  anyhow = "1"
  thiserror = "1"
