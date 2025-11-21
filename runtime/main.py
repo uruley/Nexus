@@ -2,13 +2,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 from typing import Iterable, List
 
 WORLD_PATH = Path("apps/nexus_desktop/assets/world.json")
+POLL_INTERVAL_SECONDS = 0.2
+
+
+def log(message: str) -> None:
+    print(f"[runtime] {message}")
 
 
 def load_world(path: Path = WORLD_PATH) -> dict:
+    """Load the on-disk world file, creating a default one if necessary."""
+
     if path.exists():
         return json.loads(path.read_text())
 
@@ -23,15 +31,31 @@ def load_world(path: Path = WORLD_PATH) -> dict:
 
 
 def save_world(world: dict, path: Path = WORLD_PATH) -> None:
+    """Persist the world to disk."""
+
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(world, indent=2))
 
 
 def load_patches(patch_path: Path) -> List[dict]:
-    content = json.loads(patch_path.read_text())
+    """Load patches from disk, coercing them into a list."""
+
+    try:
+        content = json.loads(patch_path.read_text())
+    except FileNotFoundError:
+        log(f"patch file not found: {patch_path}")
+        return []
+    except json.JSONDecodeError as exc:
+        log(f"invalid patch JSON: {exc}")
+        return []
+
     if isinstance(content, list):
-        return content
-    return [content]
+        return [p for p in content if isinstance(p, dict)]
+    if isinstance(content, dict):
+        return [content]
+
+    log("patch payload must be an object or list")
+    return []
 
 
 def ensure_entity_defaults(entity: dict) -> None:
@@ -51,10 +75,21 @@ def find_entity(world: dict, entity_id: str) -> dict | None:
     return None
 
 
-def apply_patch(world: dict, patch: dict) -> None:
+def apply_patch(world: dict, patch: dict) -> bool:
+    """Apply a single patch to the in-memory world.
+
+    Returns True if the patch mutated the world, False otherwise.
+    """
+
     patch_type = patch.get("type")
     data = patch.get("data", {})
     entity_id = patch.get("id")
+
+    start = time.perf_counter()
+
+    if not patch_type:
+        log("skipping patch with no type field")
+        return False
 
     if patch_type == "spawn_entity":
         new_entity = {
@@ -64,7 +99,9 @@ def apply_patch(world: dict, patch: dict) -> None:
             "material": {"color": [1.0, 1.0, 1.0]},
         }
         world.setdefault("entities", []).append(new_entity)
-        return
+        duration_ms = (time.perf_counter() - start) * 1000
+        log(f"applied {patch_type} in {duration_ms:.2f}ms")
+        return True
 
     if patch_type == "move_entity" and entity_id:
         entity = find_entity(world, entity_id)
@@ -74,7 +111,11 @@ def apply_patch(world: dict, patch: dict) -> None:
             translation[0] += float(data.get("dx", 0.0))
             translation[1] += float(data.get("dy", 0.0))
             translation[2] += float(data.get("dz", 0.0))
-        return
+            duration_ms = (time.perf_counter() - start) * 1000
+            log(f"applied {patch_type} in {duration_ms:.2f}ms")
+            return True
+        log(f"move_entity target missing: {entity_id}")
+        return False
 
     if patch_type == "set_color" and entity_id:
         entity = find_entity(world, entity_id)
@@ -83,12 +124,19 @@ def apply_patch(world: dict, patch: dict) -> None:
             color = data.get("color")
             if isinstance(color, Iterable):
                 entity["material"]["color"] = [float(c) for c in color][:3]
-        return
+                duration_ms = (time.perf_counter() - start) * 1000
+                log(f"applied {patch_type} in {duration_ms:.2f}ms")
+                return True
+        log(f"set_color target missing or invalid payload for {entity_id}")
+        return False
 
     if patch_type == "delete_entity" and entity_id:
         entities = world.get("entities", [])
+        before = len(entities)
         world["entities"] = [e for e in entities if e.get("id") != entity_id]
-        return
+        duration_ms = (time.perf_counter() - start) * 1000
+        log(f"applied {patch_type} in {duration_ms:.2f}ms")
+        return before != len(world["entities"])
 
     if patch_type == "move_camera":
         camera = world.setdefault("camera", {"translation": [0.0, 0.0, 0.0]})
@@ -96,7 +144,9 @@ def apply_patch(world: dict, patch: dict) -> None:
         translation[0] += float(data.get("dx", 0.0))
         translation[1] += float(data.get("dy", 0.0))
         translation[2] += float(data.get("dz", 0.0))
-        return
+        duration_ms = (time.perf_counter() - start) * 1000
+        log(f"applied {patch_type} in {duration_ms:.2f}ms")
+        return True
 
     if patch_type == "set_light":
         light = world.setdefault("light", {"color": [1.0, 1.0, 1.0], "intensity": 1.0})
@@ -104,32 +154,90 @@ def apply_patch(world: dict, patch: dict) -> None:
             light["intensity"] = float(data["intensity"])
         if "color" in data and isinstance(data["color"], Iterable):
             light["color"] = [float(c) for c in data["color"]][:3]
-        return
+        duration_ms = (time.perf_counter() - start) * 1000
+        log(f"applied {patch_type} in {duration_ms:.2f}ms")
+        return True
+
+    log(f"unhandled patch type: {patch_type}")
+    return False
 
 
-def apply_patches(world: dict, patches: List[dict]) -> dict:
+def apply_patches(world: dict, patches: List[dict], world_path: Path = WORLD_PATH) -> dict:
+    """Apply patches sequentially, persisting after each patch."""
+
     for patch in patches:
         apply_patch(world, patch)
+        save_world(world, world_path)
     return world
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Apply router patches to world.json")
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         "--patch",
         type=Path,
-        required=True,
         help="Path to a JSON patch file (single patch or list).",
+    )
+    group.add_argument(
+        "--watch",
+        type=Path,
+        help="Watch a patch file for changes and apply automatically.",
+    )
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=POLL_INTERVAL_SECONDS,
+        help="Polling interval in seconds when using --watch.",
+    )
+    parser.add_argument(
+        "--world",
+        type=Path,
+        default=WORLD_PATH,
+        help="Override world.json output path.",
     )
     return parser.parse_args()
 
 
+def watch_patch_file(patch_path: Path, world_path: Path, interval: float) -> None:
+    """Continuously poll for changes to patch_path and apply them live."""
+
+    world = load_world(world_path)
+    last_modified: float | None = None
+    log(f"watching {patch_path} for updates")
+
+    while True:
+        try:
+            modified = patch_path.stat().st_mtime
+        except FileNotFoundError:
+            time.sleep(interval)
+            continue
+
+        if last_modified is None or modified > last_modified:
+            patches = load_patches(patch_path)
+            if patches:
+                apply_patches(world, patches, world_path)
+                log(f"applied {len(patches)} patches from watch loop")
+            else:
+                log("no valid patches found; clearing command file")
+
+            patch_path.write_text(json.dumps([], indent=2))
+            last_modified = patch_path.stat().st_mtime
+
+        time.sleep(interval)
+
+
 def main() -> None:
     args = parse_args()
+
+    if args.watch:
+        watch_patch_file(args.watch, args.world, args.interval)
+        return
+
     patches = load_patches(args.patch)
-    world = load_world()
-    updated_world = apply_patches(world, patches)
-    save_world(updated_world)
+    world = load_world(args.world)
+    updated_world = apply_patches(world, patches, args.world)
+    save_world(updated_world, args.world)
 
 
 if __name__ == "__main__":
