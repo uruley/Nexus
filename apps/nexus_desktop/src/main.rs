@@ -7,66 +7,31 @@ use bevy::prelude::*;
 use bevy::render::RenderPlugin;
 use bevy::sprite::SpritePlugin;
 use bevy::transform::TransformPlugin;
-use bevy::window::WindowPlugin;
+use bevy::window::{PrimaryWindow, WindowPlugin};
 use bevy::winit::WinitPlugin;
-use serde::Deserialize;
+use neural_renderer::{
+    build_renderer_from_config, render_request_from_world, NeuralRendererConfig, RendererBackend,
+};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use tracing::info;
-use world_state::Collider;
+use world_state::{Collider, WorldSnapshot};
 
 const WORLD_PATH: &str = "apps/nexus_desktop/assets/world.json";
-
-#[derive(Debug, Clone, Deserialize, Default)]
-#[serde(default)]
-struct TransformData {
-    translation: Option<[f32; 3]>,
-    rotation: Option<[f32; 3]>,
-    scale: Option<[f32; 3]>,
-}
-
-#[derive(Debug, Clone, Deserialize, Default)]
-#[serde(default)]
-struct MaterialData {
-    color: Option<[f32; 3]>,
-}
-
-#[derive(Debug, Clone, Deserialize, Default)]
-#[serde(default)]
-struct EntityData {
-    id: String,
-    kind: Option<String>,
-    transform: Option<TransformData>,
-    material: Option<MaterialData>,
-}
-
-#[derive(Debug, Clone, Deserialize, Default)]
-#[serde(default)]
-struct CameraData {
-    translation: Option<[f32; 3]>,
-}
-
-#[derive(Debug, Clone, Deserialize, Default)]
-#[serde(default)]
-struct LightData {
-    color: Option<[f32; 3]>,
-    intensity: Option<f32>,
-}
-
-#[derive(Debug, Clone, Deserialize, Default)]
-#[serde(default)]
-struct WorldFile {
-    entities: Vec<EntityData>,
-    camera: Option<CameraData>,
-    light: Option<LightData>,
-}
 
 #[derive(Resource)]
 struct WorldSyncState {
     path: PathBuf,
     last_modified: Option<SystemTime>,
+    timer: Timer,
+    latest_snapshot: Option<WorldSnapshot>,
+}
+
+#[derive(Resource)]
+struct NeuralRendererState {
+    renderer: Box<dyn RendererBackend>,
     timer: Timer,
 }
 
@@ -79,10 +44,11 @@ impl WorldSyncState {
             path: path.into(),
             last_modified: None,
             timer: Timer::new(Duration::from_millis(100), TimerMode::Repeating),
+            latest_snapshot: None,
         }
     }
 
-    fn read_snapshot(&mut self) -> Option<WorldFile> {
+    fn read_snapshot(&mut self) -> Option<WorldSnapshot> {
         let metadata = fs::metadata(&self.path).ok()?;
         let modified = metadata.modified().ok();
 
@@ -93,8 +59,9 @@ impl WorldSyncState {
         }
 
         let raw = fs::read_to_string(&self.path).ok()?;
-        let parsed: WorldFile = serde_json::from_str(&raw).ok()?;
+        let parsed: WorldSnapshot = serde_json::from_str(&raw).ok()?;
         self.last_modified = modified;
+        self.latest_snapshot = Some(parsed.clone());
         Some(parsed)
     }
 }
@@ -107,6 +74,7 @@ fn main() -> Result<()> {
     App::new()
         .insert_resource(ClearColor(Color::srgb(0.02, 0.02, 0.08)))
         .insert_resource(WorldSyncState::new(WORLD_PATH))
+        .insert_resource(build_renderer_resource())
         .add_plugins((
             MinimalPlugins,
             WindowPlugin::default(),
@@ -118,7 +86,7 @@ fn main() -> Result<()> {
         ))
         .add_plugins(AnchorPlugin)
         .add_systems(Startup, setup_scene)
-        .add_systems(Update, sync_world_file)
+        .add_systems(Update, (sync_world_file, run_neural_renderer))
         .run();
 
     Ok(())
@@ -151,26 +119,14 @@ fn sync_world_file(
         .map(|(entity, id)| (id.0.clone(), entity))
         .collect();
 
-    for entity_data in world.entities {
+    for entity_data in world.entities.clone() {
         if entity_data.id.is_empty() {
             continue;
         }
 
-        let translation = entity_data
-            .transform
-            .as_ref()
-            .and_then(|t| t.translation)
-            .unwrap_or([0.0, 0.0, 0.0]);
-        let scale = entity_data
-            .transform
-            .as_ref()
-            .and_then(|t| t.scale)
-            .unwrap_or([1.0, 1.0, 1.0]);
-        let color_arr = entity_data
-            .material
-            .as_ref()
-            .and_then(|m| m.color)
-            .unwrap_or([1.0, 1.0, 1.0]);
+        let translation = entity_data.transform.translation.unwrap_or([0.0, 0.0, 0.0]);
+        let scale = entity_data.transform.scale.unwrap_or([1.0, 1.0, 1.0]);
+        let color_arr = entity_data.material.color.unwrap_or([1.0, 1.0, 1.0]);
         let color = Color::srgb(color_arr[0], color_arr[1], color_arr[2]);
 
         if let Some(existing_entity) = entity_map.remove(&entity_data.id) {
@@ -208,19 +164,16 @@ fn sync_world_file(
         commands.entity(*entity).despawn_recursive();
     }
 
-    if let Some(camera_data) = world.camera {
+    if let Some(camera_data) = world.camera.clone() {
         if let Some(translation) = camera_data.translation {
             if let Some(mut camera_transform) = camera_query.iter_mut().next() {
-                camera_transform.translation = Vec3::new(
-                    translation[0],
-                    translation[1],
-                    translation[2],
-                );
+                camera_transform.translation =
+                    Vec3::new(translation[0], translation[1], translation[2]);
             }
         }
     }
 
-    if let Some(light) = world.light {
+    if let Some(light) = world.light.clone() {
         if let Some(color) = light.color {
             clear_color.0 = Color::srgb(color[0], color[1], color[2]);
         }
@@ -228,6 +181,47 @@ fn sync_world_file(
         if let Some(intensity) = light.intensity {
             let clamped = intensity.clamp(0.0, 5.0);
             clear_color.0.set_a((clamped / 5.0).clamp(0.1, 1.0));
+        }
+    }
+}
+
+fn build_renderer_resource() -> NeuralRendererState {
+    let config = NeuralRendererConfig::default();
+    let renderer =
+        build_renderer_from_config(&config).expect("failed to construct neural renderer backend");
+    NeuralRendererState {
+        renderer,
+        timer: Timer::from_seconds(0.5, TimerMode::Repeating),
+    }
+}
+
+fn run_neural_renderer(
+    time: Res<Time>,
+    mut state: ResMut<NeuralRendererState>,
+    world_state: Res<WorldSyncState>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+) {
+    state.timer.tick(time.delta());
+    if !state.timer.finished() {
+        return;
+    }
+
+    let Some(world) = world_state.latest_snapshot.clone() else {
+        return;
+    };
+
+    let (width, height) = windows
+        .get_single()
+        .map(|window| (window.width() as u32, window.height() as u32))
+        .unwrap_or((800, 600));
+
+    let request = render_request_from_world(&world, width, height);
+    match state.renderer.render(request) {
+        Ok(output) => {
+            info!(target: "nexus_desktop", "Neural renderer output: {}", output.summary);
+        }
+        Err(err) => {
+            info!(target: "nexus_desktop", "Neural renderer failed: {err}");
         }
     }
 }

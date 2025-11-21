@@ -4,10 +4,10 @@
      "crates/anchor_core",
      "crates/intent_api",
      "crates/world_introspection",
-     "crates/perf_hud",
-     "crates/unified_field",
-     "apps/nexus_desktop", "crates/world_state", "crates/anchor",
- ]
+    "crates/perf_hud",
+    "crates/unified_field",
+    "apps/nexus_desktop", "crates/world_state", "crates/anchor", "crates/neural_renderer",
+]
 
  [workspace.package]
  edition = "2021"

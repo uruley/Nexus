@@ -12,3 +12,4 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 anchor = { path = "../../crates/anchor" }
 world_state = { path = "../../crates/world_state" }
+neural_renderer = { path = "../../crates/neural_renderer" }
