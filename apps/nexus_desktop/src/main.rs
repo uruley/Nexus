@@ -2,13 +2,8 @@ use anchor::{AnchorPlugin, Velocity};
 use anyhow::Result;
 use bevy::app::App;
 use bevy::core_pipeline::core_2d::Camera2dBundle;
-use bevy::core_pipeline::CorePipelinePlugin;
 use bevy::prelude::*;
-use bevy::render::RenderPlugin;
-use bevy::sprite::SpritePlugin;
-use bevy::transform::TransformPlugin;
 use bevy::window::{PrimaryWindow, WindowPlugin};
-use bevy::winit::WinitPlugin;
 use neural_renderer::{
     build_renderer_from_config, render_request_from_world, NeuralRendererConfig, RendererBackend,
 };
@@ -49,7 +44,13 @@ impl WorldSyncState {
     }
 
     fn read_snapshot(&mut self) -> Option<WorldSnapshot> {
-        let metadata = fs::metadata(&self.path).ok()?;
+        let metadata = match fs::metadata(&self.path) {
+            Ok(m) => m,
+            Err(e) => {
+                info!("Failed to read metadata for world.json: {}", e);
+                return None;
+            }
+        };
         let modified = metadata.modified().ok();
 
         if let (Some(last), Some(current)) = (self.last_modified, modified) {
@@ -58,11 +59,44 @@ impl WorldSyncState {
             }
         }
 
-        let raw = fs::read_to_string(&self.path).ok()?;
-        let parsed: WorldSnapshot = serde_json::from_str(&raw).ok()?;
-        self.last_modified = modified;
-        self.latest_snapshot = Some(parsed.clone());
-        Some(parsed)
+        let raw = match fs::read_to_string(&self.path) {
+            Ok(s) => s,
+            Err(e) => {
+                info!("Failed to read world.json: {}", e);
+                return None;
+            }
+        };
+        
+        match serde_json::from_str::<WorldSnapshot>(&raw) {
+            Ok(mut parsed) => {
+                // Debug Default: If world is empty, spawn a visible debug cube
+                if parsed.entities.is_empty() {
+                    info!("World is empty. Injecting default debug cube.");
+                    parsed.entities.push(world_state::WorldEntity {
+                        id: "debug_cube".to_string(),
+                        kind: Some("cube".to_string()),
+                        transform: world_state::TransformData {
+                            translation: Some([0.0, 2.0, 0.0]),
+                            rotation: Some([0.0, 0.0, 0.0]),
+                            scale: Some([1.0, 1.0, 1.0]),
+                        },
+                        material: world_state::MaterialData {
+                            color: Some([1.0, 0.0, 1.0]), // Magenta
+                        },
+                    });
+                }
+
+                info!("Successfully loaded world.json with {} entities", parsed.entities.len());
+                self.last_modified = modified;
+                self.latest_snapshot = Some(parsed.clone());
+                Some(parsed)
+            },
+            Err(e) => {
+                info!("Failed to parse world.json: {}", e);
+                info!("Raw content snippet: {:.100}", raw);
+                None
+            }
+        }
     }
 }
 
@@ -71,25 +105,30 @@ fn main() -> Result<()> {
 
     info!(target: "nexus_desktop", "Launching Nexus desktop app");
 
+    let base_clear = Color::srgb(0.02, 0.02, 0.08);
+
     App::new()
-        .insert_resource(ClearColor(Color::srgb(0.02, 0.02, 0.08)))
+        .insert_resource(ClearColor(base_clear))
         .insert_resource(WorldSyncState::new(WORLD_PATH))
         .insert_resource(build_renderer_resource())
-        .add_plugins((
-            MinimalPlugins,
-            WindowPlugin::default(),
-            WinitPlugin::default(),
-            TransformPlugin,
-            RenderPlugin::default(),
-            CorePipelinePlugin::default(),
-            SpritePlugin::default(),
-        ))
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "Nexus Engine".into(),
+                resolution: (1280.0, 720.0).into(),
+                ..default()
+            }),
+            ..default()
+        }).disable::<bevy::log::LogPlugin>())
         .add_plugins(AnchorPlugin)
-        .add_systems(Startup, setup_scene)
+        .add_systems(Startup, (setup_scene, log_startup))
         .add_systems(Update, (sync_world_file, run_neural_renderer))
         .run();
 
     Ok(())
+}
+
+fn log_startup() {
+    info!("Nexus desktop app startup: Bevy app running, waiting for window events");
 }
 
 fn setup_scene(mut commands: Commands) {
@@ -101,7 +140,7 @@ fn sync_world_file(
     time: Res<Time>,
     mut state: ResMut<WorldSyncState>,
     existing_entities: Query<(Entity, &WorldEntityId)>,
-    mut sprite_query: Query<(&mut Transform, &mut Sprite), With<WorldEntityId>>,
+    mut sprite_query: Query<(&mut Transform, &mut Sprite), (With<WorldEntityId>, Without<Camera>)>,
     mut camera_query: Query<&mut Transform, With<Camera>>,
     mut clear_color: ResMut<ClearColor>,
 ) {
@@ -129,9 +168,13 @@ fn sync_world_file(
         let color_arr = entity_data.material.color.unwrap_or([1.0, 1.0, 1.0]);
         let color = Color::srgb(color_arr[0], color_arr[1], color_arr[2]);
 
+        // Force Z=0.0 for all sprites so they are always in front of the background.
+        let z_pos = 0.0;
+
         if let Some(existing_entity) = entity_map.remove(&entity_data.id) {
             if let Ok((mut transform, mut sprite)) = sprite_query.get_mut(existing_entity) {
-                transform.translation = Vec3::new(translation[0], translation[1], translation[2]);
+                // SCALE FIX: Multiply position by 50.0 to visualize small units on screen
+                transform.translation = Vec3::new(translation[0] * 50.0, translation[1] * 50.0, z_pos);
                 transform.scale = Vec3::new(scale[0], scale[1], scale[2]);
                 sprite.color = color;
             }
@@ -144,9 +187,9 @@ fn sync_world_file(
                         ..Default::default()
                     },
                     transform: Transform::from_translation(Vec3::new(
-                        translation[0],
-                        translation[1],
-                        translation[2],
+                        translation[0] * 50.0,
+                        translation[1] * 50.0,
+                        z_pos,
                     ))
                     .with_scale(Vec3::new(scale[0], scale[1], scale[2])),
                     ..Default::default()
@@ -167,22 +210,14 @@ fn sync_world_file(
     if let Some(camera_data) = world.camera.clone() {
         if let Some(translation) = camera_data.translation {
             if let Some(mut camera_transform) = camera_query.iter_mut().next() {
+                // Ignore world.json camera Z for 2D orthographic view, keep it at default
                 camera_transform.translation =
-                    Vec3::new(translation[0], translation[1], translation[2]);
+                    Vec3::new(translation[0] * 50.0, translation[1] * 50.0, 999.9);
             }
         }
     }
 
-    if let Some(light) = world.light.clone() {
-        if let Some(color) = light.color {
-            clear_color.0 = Color::srgb(color[0], color[1], color[2]);
-        }
-
-        if let Some(intensity) = light.intensity {
-            let clamped = intensity.clamp(0.0, 5.0);
-            clear_color.0.set_a((clamped / 5.0).clamp(0.1, 1.0));
-        }
-    }
+    // For now, ignore light color for ClearColor to keep a stable dark background.
 }
 
 fn build_renderer_resource() -> NeuralRendererState {
@@ -225,3 +260,5 @@ fn run_neural_renderer(
         }
     }
 }
+
+

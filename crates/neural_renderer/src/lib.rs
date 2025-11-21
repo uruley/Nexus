@@ -14,7 +14,7 @@ pub enum RenderError {
     Failed(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RenderRequest {
     pub width: u32,
     pub height: u32,
@@ -23,18 +23,18 @@ pub struct RenderRequest {
     pub entities: Vec<RenderEntity>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RenderCamera {
     pub translation: [f32; 3],
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RenderLight {
     pub color: [f32; 3],
     pub intensity: f32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RenderEntity {
     pub id: String,
     pub translation: [f32; 3],

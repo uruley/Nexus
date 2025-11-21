@@ -94,3 +94,5 @@ def command(text: str = Query(..., description="Natural language command")):
 #    cargo run -p app
 #    -> Cube should move upward.
 #    Commands to try: make cube red, spawn cube, delete cube.
+
+

@@ -30,7 +30,7 @@ def text_to_patches(text: str) -> List[dict]:
         ]
 
     if normalized == "spawn cube":
-        entity_id = "entity:newcube"
+        entity_id = DEFAULT_ENTITY_ID
         return [
             {
                 "id": entity_id,

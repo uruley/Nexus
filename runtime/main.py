@@ -6,8 +6,12 @@ import time
 from pathlib import Path
 from typing import Iterable, List
 
-WORLD_PATH = Path("apps/nexus_desktop/assets/world.json")
 POLL_INTERVAL_SECONDS = 0.2
+
+# Robustly find the world path relative to the repo root, not CWD
+RUNTIME_DIR = Path(__file__).resolve().parent
+REPO_ROOT = RUNTIME_DIR.parent
+WORLD_PATH = REPO_ROOT / "apps" / "nexus_desktop" / "assets" / "world.json"
 
 
 def log(message: str) -> None:
@@ -18,7 +22,7 @@ def load_world(path: Path = WORLD_PATH) -> dict:
     """Load the on-disk world file, creating a default one if necessary."""
 
     if path.exists():
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8-sig"))
 
     default_world = {
         "entities": [],
@@ -253,6 +257,7 @@ def simulate_patches(patch_path: Path, world_path: Path) -> None:
 
 def main() -> None:
     args = parse_args()
+    log(f"Using world file: {args.world.resolve()}")
 
     if args.watch:
         watch_patch_file(args.watch, args.world, args.interval)

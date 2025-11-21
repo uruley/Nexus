@@ -1,55 +1,61 @@
-# Nexus Quickstart (M1–M3 Demo)
+# Nexus Quickstart (Local Dev)
 
-## Overview
-This demo wires the full Nexus loop together: camera input feeds perception, runtime applies patches into `world.json`, and the Bevy app renders a cube you can manipulate live from the browser-based UI.
+This guide covers the standard bring-up sequence for the Nexus Engine.
 
-## Prerequisites
-- Python installed with the project dependencies available.
-- Rust and `cargo` installed.
-- Repository cloned locally with dependencies already fetched.
-
-## Step 1: Start perception (optional for now)
-From the repo root, start your perception server to emit `perception/state.json` (use the same command you normally use, e.g., `python perception/server.py`). The `/frame` endpoint is optional for the command router demo; you can proceed without live camera input.
-
-## Step 2: Start the Command Router + UI
-From the repo root:
+## 1. Start Perception (optional for first tests)
 
 ```bash
-uvicorn router.server:app --host 127.0.0.1 --port 5056 --reload
+cd perception
+uvicorn server:app --host 127.0.0.1 --port 5055 --reload
 ```
 
-Then open the browser at `http://127.0.0.1:5056/ui`. The UI provides a textbox, Send button, command history, and a live JSON patch display showing what will be written to `router/generated/command.json`.
+*   **Verify**: Open `http://127.0.0.1:5055/health` and check for `{"ok": true, ...}`.
 
-## Step 3: Start runtime in watch mode
-Use the runtime watcher to apply patches as they land in `router/generated/command.json`:
+## 2. Start Command Router + UI
+
+Open a new terminal:
+
+```bash
+cd router
+uvicorn server:app --host 127.0.0.1 --port 5056 --reload
+```
+
+*   **Verify**: Open `http://127.0.0.1:5056/ui` in your browser. You should see the command interface.
+
+## 3. Start Runtime (watch mode)
+
+Open a new terminal. Run from the **repo root**:
 
 ```bash
 python runtime/main.py --watch router/generated/command.json
 ```
 
-The runtime will detect new commands, apply them to `apps/nexus_desktop/assets/world.json`, and log each patch as it runs. Leave this process running while you test.
+*   **Note**: The runtime automatically finds `apps/nexus_desktop/assets/world.json` relative to the repository root.
+*   **Verify**: You should see `[runtime] Using world file: ...\apps\nexus_desktop\assets\world.json` followed by `watching ...`.
 
-## Step 4: Start the Bevy app
-In a separate shell from the repo root:
+## 4. Start Bevy Desktop App
+
+Open a new terminal:
 
 ```bash
-cargo run -p app
+cargo run -p nexus_desktop
 ```
 
-A window titled “Nexus” should appear, showing a cube that briefly falls under gravity before resting on the floor. HUD text in the corner reports frame timing and diagnostics.
+*   **Verify**: A window titled "Nexus Engine" should open.
+*   **Note**: On first run you'll see a default debug cube (magenta) if your world is empty. Once you issue commands via /ui, the live world will override this.
+*   **Troubleshooting**: If the window doesn't appear, check the terminal for logs starting with `Nexus desktop app startup`.
 
-## Step 5: Drive the cube from the UI
-In the `/ui` page, try commands such as:
+## 5. Use the UI
 
-- `move cube up`
-- `move cube down`
-- `make cube red`
-- `spawn cube`
-- `delete cube`
+1.  Go to `http://127.0.0.1:5056/ui`
+2.  Type `spawn cube` and hit Enter.
+3.  **Observe**:
+    *   The UI shows a new patch in the JSON view.
+    *   The runtime terminal logs `applied spawn_entity`.
+    *   The Bevy window shows a white square (cube) appearing and falling to the floor.
 
-Patches for each command will display in the UI. The runtime logs every application, and the cube(s) in the Bevy window should move, change color, appear, or disappear without restarting the app.
+### Common Commands
 
-## Troubleshooting
-- If `cargo` hits a temporary 403 from crates.io but you have built before, the cached artifacts may still let the app run.
-- If the cube does not react, confirm that runtime watch mode is active and pointing at `router/generated/command.json`.
-- If `/ui` does not load, ensure `uvicorn` is running on port 5056.
+*   `move cube up` / `down` / `left` / `right`
+*   `make cube red` / `blue` / `green`
+*   `delete cube`
