@@ -7,6 +7,8 @@ from typing import List
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from router.commands import DEFAULT_ENTITY_ID, text_to_patches
+
 app = FastAPI(title="Nexus Command Router")
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -14,9 +16,6 @@ GENERATED_DIR = BASE_DIR / "generated"
 UI_PATH = BASE_DIR / "ui" / "index.html"
 UI_HTML = UI_PATH.read_text(encoding="utf-8") if UI_PATH.exists() else None
 COMMAND_PATH = GENERATED_DIR / "command.json"
-DEFAULT_ENTITY_ID = "entity:cube:001"
-
-
 # Command UI manual flow (M3 Phase 3)
 # 1) Start router:
 #    uvicorn router.server:app --host 127.0.0.1 --port 5056 --reload
@@ -31,81 +30,6 @@ def ensure_generated_dir() -> None:
     """Ensure the router/generated directory exists."""
 
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def text_to_patches(text: str) -> List[dict]:
-    """Convert a natural language command into schema-compliant patches.
-
-    The router always returns a list so the runtime can handle single and
-    multi-patch commands uniformly. All patch shapes mirror router/schema.json.
-    """
-
-    normalized = " ".join(text.lower().split())
-
-    move_vectors = {
-        "move cube up": (0.0, 1.0, 0.0),
-        "move cube down": (0.0, -1.0, 0.0),
-        "move cube left": (-1.0, 0.0, 0.0),
-        "move cube right": (1.0, 0.0, 0.0),
-        "move cube forward": (0.0, 0.0, 1.0),
-        "move cube back": (0.0, 0.0, -1.0),
-    }
-
-    if normalized in move_vectors:
-        dx, dy, dz = move_vectors[normalized]
-        return [
-            {
-                "id": DEFAULT_ENTITY_ID,
-                "type": "move_entity",
-                "data": {"dx": dx, "dy": dy, "dz": dz},
-            }
-        ]
-
-    if normalized == "spawn cube":
-        entity_id = "entity:newcube"
-        return [
-            {
-                "id": entity_id,
-                "type": "spawn_entity",
-                "data": {"kind": "cube"},
-            },
-            {
-                "id": entity_id,
-                "type": "move_entity",
-                "data": {"dx": 0.0, "dy": 1.0, "dz": 0.0},
-            },
-            {
-                "id": entity_id,
-                "type": "set_color",
-                "data": {"color": [1.0, 1.0, 1.0]},
-            },
-        ]
-
-    if normalized == "delete cube":
-        return [
-            {
-                "id": DEFAULT_ENTITY_ID,
-                "type": "delete_entity",
-                "data": {},
-            }
-        ]
-
-    color_map = {
-        "make cube red": [1.0, 0.0, 0.0],
-        "make cube blue": [0.0, 0.0, 1.0],
-        "make cube green": [0.0, 1.0, 0.0],
-    }
-
-    if normalized in color_map:
-        return [
-            {
-                "id": DEFAULT_ENTITY_ID,
-                "type": "set_color",
-                "data": {"color": color_map[normalized]},
-            }
-        ]
-
-    return []
 
 
 def write_patches(patches: List[dict]) -> List[dict]:
