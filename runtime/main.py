@@ -184,6 +184,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Watch a patch file for changes and apply automatically.",
     )
+    group.add_argument(
+        "--simulate",
+        type=Path,
+        help="Apply patches once and print a concise summary (no watch loop).",
+    )
     parser.add_argument(
         "--interval",
         type=float,
@@ -227,11 +232,34 @@ def watch_patch_file(patch_path: Path, world_path: Path, interval: float) -> Non
         time.sleep(interval)
 
 
+def simulate_patches(patch_path: Path, world_path: Path) -> None:
+    """Apply patches once and print a concise summary for debugging."""
+
+    patches = load_patches(patch_path)
+    world = load_world(world_path)
+
+    print(f"[simulate] loaded {len(patches)} patches from {patch_path}")
+
+    for patch in patches:
+        patch_type = patch.get("type", "<unknown>")
+        target_id = patch.get("id", "<no-id>")
+        applied = apply_patch(world, patch)
+        status = "applied" if applied else "skipped"
+        print(f"[simulate] {status} {patch_type} to {target_id}")
+
+    save_world(world, world_path)
+    print(f"[simulate] world saved to {world_path}")
+
+
 def main() -> None:
     args = parse_args()
 
     if args.watch:
         watch_patch_file(args.watch, args.world, args.interval)
+        return
+
+    if args.simulate:
+        simulate_patches(args.simulate, args.world)
         return
 
     patches = load_patches(args.patch)
