@@ -9,6 +9,7 @@ use bevy::sprite::SpritePlugin;
 use bevy::transform::TransformPlugin;
 use bevy::window::{PrimaryWindow, WindowPlugin};
 use bevy::winit::WinitPlugin;
+use motion_compiler as _;
 use neural_renderer::{
     build_renderer_from_config, render_request_from_world, NeuralRendererConfig, RendererBackend,
 };
